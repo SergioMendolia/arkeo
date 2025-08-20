@@ -223,11 +223,7 @@ func (m *Manager) createDefaultConfig() error {
 			"calendar": {
 				Enabled: false,
 				Config: map[string]interface{}{
-					"provider":         "google",
-					"client_id":        "",
-					"client_secret":    "",
-					"refresh_token":    "",
-					"calendar_ids":     "primary",
+					"ical_urls":        "",
 					"include_declined": false,
 				},
 			},
@@ -245,11 +241,15 @@ func (m *Manager) createDefaultConfig() error {
 	// Save to viper and file
 	m.config = defaultConfig
 
-	// Marshal to viper
-	configMap := make(map[string]interface{})
-	if err := yaml.Unmarshal([]byte(""), &configMap); err == nil {
-		for key, value := range configMap {
-			m.viper.Set(key, value)
+	// Set config values in viper
+	m.viper.Set("app.date_format", defaultConfig.App.DateFormat)
+	m.viper.Set("app.log_level", defaultConfig.App.LogLevel)
+
+	// Set connector configurations
+	for name, config := range defaultConfig.Connectors {
+		m.viper.Set(fmt.Sprintf("connectors.%s.enabled", name), config.Enabled)
+		for key, value := range config.Config {
+			m.viper.Set(fmt.Sprintf("connectors.%s.config.%s", name, key), value)
 		}
 	}
 

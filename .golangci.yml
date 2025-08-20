@@ -1,16 +1,54 @@
+version: "2"
+
 run:
   timeout: 5m
   go: '1.21'
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - errcheck
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - mnd
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+    - asciicheck
+    - goheader
+    - gomodguard
+    - makezero
+    - prealloc
+    - predeclared
+    - thelper
+    - tparallel
+    - wastedassign
 
 linters-settings:
   govet:
-    check-shadowing: true
-  golint:
-    min-confidence: 0
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 15
-  maligned:
-    suggest-new: true
   dupl:
     threshold: 100
   goconst:
@@ -20,8 +58,6 @@ linters-settings:
     locale: US
   lll:
     line-length: 140
-  goimports:
-    local-prefixes: github.com/autotime/autotime
   gocritic:
     enabled-tags:
       - diagnostic
@@ -30,74 +66,50 @@ linters-settings:
       - performance
       - style
     disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - dupImport
       - ifElseChain
       - octalLiteral
       - whyNoLint
       - wrapperFunc
-
-linters:
-  disable-all: true
-  enable:
-    - bodyclose
-    - deadcode
-    - depguard
-    - dogsled
-    - dupl
-    - errcheck
-    - exportloopref
-    - exhaustive
-    - gochecknoinits
-    - goconst
-    - gocritic
-    - gocyclo
-    - gofmt
-    - goimports
-    - gomnd
-    - goprintffuncname
-    - gosec
-    - gosimple
-    - govet
-    - ineffassign
-    - lll
-    - misspell
-    - nakedret
-    - noctx
-    - nolintlint
-    - rowserrcheck
-    - staticcheck
-    - structcheck
-    - stylecheck
-    - typecheck
-    - unconvert
-    - unparam
-    - unused
-    - varcheck
-    - whitespace
+  revive:
+    confidence: 0
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - return
+    ignored-numbers:
+      - '0'
+      - '1'
+      - '2'
+      - '3'
+    ignored-functions:
+      - strings.SplitN
+  goimports:
+    local-prefixes: github.com/autotime/autotime
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gomnd
-        - lll
-        - goconst
-        - gosec
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-  exclude-use-default: false
-  exclude:
-    # errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
-    - func name will be used as test\.Test.* by other packages, and that stutters; consider calling this
-    - should have a package comment, unless it's in another file for this package
-
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - mnd
+        - lll
+        - goconst
+        - gosec
+        - dupl
+    - linters:
+        - lll
+      source: "^//go:generate "
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+    - text: "Use of builtin 'new' not recommended"
+      linters:
+        - gocritic
 
 severity:
   default-severity: error
-  case-sensitive: false
