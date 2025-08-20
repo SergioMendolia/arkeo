@@ -40,12 +40,6 @@ connectors:
       # Include declined calendar events
       include_declined: false
 
-      # Enable debug logging for calendar connector (optional)
-      # This can also be set globally via app.log_level or environment variable LOG_LEVEL=debug
-      # log_level: "debug"
-
-
-
   # GitLab connector - fetches push events from GitLab API (all branches)
   gitlab:
     enabled: false
@@ -59,8 +53,6 @@ connectors:
       # GitLab personal access token from Profile > Access Tokens
       # Requires 'read_api' scope to access user events data
       access_token: "your-gitlab-access-token"
-
-
 
   # YouTrack connector - fetches activities and issue updates from YouTrack
   youtrack:
@@ -94,11 +86,3 @@ connectors:
       # Default includes idReadable for human-readable issue keys (PROJ-123 format)
       # Also includes issue reference for comment activities
       # api_fields: "id,timestamp,author(login,name),category(id,name),target(id,idReadable,summary,issue(id,idReadable,summary))"
-
-      # Enable debug logging for YouTrack connector (optional)
-      # This can also be set globally via app.log_level or environment variable LOG_LEVEL=debug
-      # log_level: "debug"
-
-
-
-
