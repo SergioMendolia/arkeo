@@ -6,14 +6,8 @@ app:
   # Date format for display (Go time format)
   date_format: "2006-01-02"
 
-  # Timezone for activity timestamps
-  timezone: "Local"
-
   # Application logging level (debug, info, warn, error)
   log_level: "info"
-
-  # How long to cache connector data
-  cache_duration: "1h"
 
 # Connector configurations
 connectors:
@@ -31,8 +25,7 @@ connectors:
       # Include activities from private repositories
       include_private: false
 
-    # How often to refresh GitHub data
-    refresh_interval: "15m"
+
 
   # Google Calendar connector - fetches calendar events
   calendar:
@@ -56,7 +49,7 @@ connectors:
       # Include declined calendar events
       include_declined: false
 
-    refresh_interval: "10m"
+
 
   # GitLab connector - fetches push events from GitLab API (all branches)
   gitlab:
@@ -72,4 +65,4 @@ connectors:
       # Requires 'read_api' scope to access user events data
       access_token: "your-gitlab-access-token"
 
-    refresh_interval: "15m"
+

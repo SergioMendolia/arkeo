@@ -355,7 +355,6 @@ func init() {
 			cfg := configManager.GetConfig()
 			fmt.Printf("App settings:\n")
 			fmt.Printf("  Date format: %s\n", cfg.App.DateFormat)
-			fmt.Printf("  Timezone: %s\n", cfg.App.Timezone)
 			fmt.Printf("  Log level: %s\n", cfg.App.LogLevel)
 
 			fmt.Printf("\nConnector status:\n")

@@ -171,9 +171,7 @@ AutoTime stores configuration in `~/.config/autotime/config.yaml`. You can edit 
 ```yaml
 app:
   date_format: "2006-01-02"
-  timezone: "Local"
   log_level: "info"
-  cache_duration: "1h"
 
 connectors:
   github:
@@ -182,7 +180,6 @@ connectors:
       token: "ghp_your_token_here"
       username: "your-username"
       include_private: false
-    refresh_interval: "15m"
 
   gitlab:
     enabled: true
@@ -190,7 +187,6 @@ connectors:
       gitlab_url: "https://gitlab.com"
       username: "your-username"
       feed_token: "glft-your_feed_token_here"
-    refresh_interval: "15m"
 
   calendar:
     enabled: false
@@ -199,7 +195,6 @@ connectors:
       client_id: "your-client-id"
       client_secret: "your-client-secret"
       calendar_ids: "primary"
-    refresh_interval: "10m"
 
 
 ui:

@@ -23,14 +23,8 @@ type AppConfig struct {
 	// Default date format for display
 	DateFormat string `yaml:"date_format" mapstructure:"date_format"`
 
-	// Default timezone
-	Timezone string `yaml:"timezone" mapstructure:"timezone"`
-
 	// Log level
 	LogLevel string `yaml:"log_level" mapstructure:"log_level"`
-
-	// Cache duration for connector data
-	CacheDuration string `yaml:"cache_duration" mapstructure:"cache_duration"`
 }
 
 // ConnectorConfig holds configuration for a specific connector
@@ -40,9 +34,6 @@ type ConnectorConfig struct {
 
 	// Connector-specific configuration
 	Config map[string]interface{} `yaml:"config" mapstructure:"config"`
-
-	// Refresh interval for this connector
-	RefreshInterval string `yaml:"refresh_interval" mapstructure:"refresh_interval"`
 }
 
 // Manager handles configuration loading, saving, and management
@@ -208,9 +199,7 @@ func (m *Manager) getConfigDir() (string, error) {
 func (m *Manager) setDefaults() {
 	// App defaults
 	m.viper.SetDefault("app.date_format", "2006-01-02")
-	m.viper.SetDefault("app.timezone", "Local")
 	m.viper.SetDefault("app.log_level", "info")
-	m.viper.SetDefault("app.cache_duration", "1h")
 
 }
 
@@ -219,10 +208,8 @@ func (m *Manager) createDefaultConfig() error {
 	// Create default config
 	defaultConfig := &Config{
 		App: AppConfig{
-			DateFormat:    "2006-01-02",
-			Timezone:      "Local",
-			LogLevel:      "info",
-			CacheDuration: "1h",
+			DateFormat: "2006-01-02",
+			LogLevel:   "info",
 		},
 		Connectors: map[string]ConnectorConfig{
 			"github": {
@@ -232,7 +219,6 @@ func (m *Manager) createDefaultConfig() error {
 					"username":        "",
 					"include_private": false,
 				},
-				RefreshInterval: "15m",
 			},
 			"calendar": {
 				Enabled: false,
@@ -244,7 +230,6 @@ func (m *Manager) createDefaultConfig() error {
 					"calendar_ids":     "primary",
 					"include_declined": false,
 				},
-				RefreshInterval: "10m",
 			},
 			"gitlab": {
 				Enabled: false,
@@ -253,7 +238,6 @@ func (m *Manager) createDefaultConfig() error {
 					"username":   "",
 					"feed_token": "",
 				},
-				RefreshInterval: "15m",
 			},
 		},
 	}

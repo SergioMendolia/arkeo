@@ -55,7 +55,7 @@ connectors:
       # Your GitLab personal access token (required)
       access_token: "glpat-your-access-token-here"
     
-    refresh_interval: "15m"
+
 ```
 
 **Note**: The connector uses the GitLab Events API endpoint `https://gitlab.com/api/v4/events` to access your activity events.

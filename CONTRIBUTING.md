@@ -183,7 +183,6 @@ Update `internal/config/config.go` to include default configuration:
         "api_key": "",
         // ... default values
     },
-    RefreshInterval: "15m",
 },
 ```
 
