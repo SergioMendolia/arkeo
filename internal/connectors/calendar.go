@@ -317,13 +317,6 @@ func (c *CalendarConnector) fetchCalendarEvents(ctx context.Context, url string,
 
 		duration := event.EndTime.Sub(event.StartTime)
 
-		tags := []string{"calendar", "meeting"}
-		if event.Location != "" {
-			tags = append(tags, "in-person")
-		} else {
-			tags = append(tags, "virtual")
-		}
-
 		metadata := map[string]string{
 			"event_id": event.UID,
 			"status":   event.Status,
@@ -345,7 +338,6 @@ func (c *CalendarConnector) fetchCalendarEvents(ctx context.Context, url string,
 			Duration:    &duration,
 			Source:      "calendar",
 			URL:         event.URL,
-			Tags:        tags,
 			Metadata:    metadata,
 		}
 

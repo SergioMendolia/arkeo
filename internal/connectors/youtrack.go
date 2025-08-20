@@ -779,7 +779,6 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 
 	// Generate activity title and description based on category
 	var title, description string
-	var tags []string
 
 	categoryID := ytActivity.Category.ID
 	categoryName := ytActivity.Category.Name
@@ -819,15 +818,12 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 			description = fmt.Sprintf("Modified %s", fieldName)
 		}
 
-		tags = []string{"youtrack", "issue", "field-update"}
-
 	case "CommentsCategory":
 		title = "Added comment"
 		if displayIssueID != "" {
 			title = fmt.Sprintf("Commented on %s", displayIssueID)
 		}
 		description = "Added a comment"
-		tags = []string{"youtrack", "comment"}
 
 	case "WorkItemCategory":
 		title = "Logged work"
@@ -835,7 +831,6 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 			title = fmt.Sprintf("Logged work on %s", displayIssueID)
 		}
 		description = "Added work item"
-		tags = []string{"youtrack", "work-item", "time-tracking"}
 
 	case "LinkCategory":
 		title = "Updated links"
@@ -843,7 +838,6 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 			title = fmt.Sprintf("Updated links for %s", displayIssueID)
 		}
 		description = "Modified issue links"
-		tags = []string{"youtrack", "issue", "links"}
 
 	default:
 		title = categoryName
@@ -851,12 +845,6 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 			title = fmt.Sprintf("%s - %s", categoryName, displayIssueID)
 		}
 		description = fmt.Sprintf("YouTrack activity: %s", categoryName)
-		tags = []string{"youtrack", "activity"}
-	}
-
-	// Add project tag if available
-	if projectName != "" {
-		tags = append(tags, strings.ToLower(projectName))
 	}
 
 	// Build metadata
@@ -910,7 +898,6 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 		Timestamp:   timestamp,
 		Source:      "youtrack",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }

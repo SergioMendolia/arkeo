@@ -232,18 +232,6 @@ func TestGitLabConnector_ConvertPushEventToActivity(t *testing.T) {
 		t.Errorf("Expected description '%s', got '%s'", expectedDescription, activity.Description)
 	}
 
-	// Check tags
-	expectedTags := []string{"gitlab", "push", "feature-branch", "test-project"}
-	if len(activity.Tags) != len(expectedTags) {
-		t.Errorf("Expected %d tags, got %d", len(expectedTags), len(activity.Tags))
-	}
-
-	for i, expectedTag := range expectedTags {
-		if i >= len(activity.Tags) || activity.Tags[i] != expectedTag {
-			t.Errorf("Expected tag '%s' at index %d, got '%s'", expectedTag, i, activity.Tags[i])
-		}
-	}
-
 	// Check metadata
 	if activity.Metadata["event_id"] != "123" {
 		t.Errorf("Expected event_id '123', got '%s'", activity.Metadata["event_id"])
@@ -397,12 +385,6 @@ func TestGitLabConnector_ConvertMergeRequestEvent(t *testing.T) {
 	expectedDescription := "Opened merge request in testuser/test-project (!42)"
 	if activity.Description != expectedDescription {
 		t.Errorf("Expected description '%s', got '%s'", expectedDescription, activity.Description)
-	}
-
-	// Check tags
-	expectedTags := []string{"gitlab", "merge-request", "opened", "test-project"}
-	if len(activity.Tags) != len(expectedTags) {
-		t.Errorf("Expected %d tags, got %d", len(expectedTags), len(activity.Tags))
 	}
 
 	// Check metadata

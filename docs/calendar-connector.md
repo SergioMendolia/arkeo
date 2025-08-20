@@ -172,15 +172,9 @@ The calendar connector creates timeline activities with the following informatio
 | **Timestamp** | Event start time | 2024-01-15 09:00:00 |
 | **Duration** | Event duration | 30 minutes |
 | **Location** | Meeting location | "Conference Room A" or meeting URL |
-| **Tags** | Auto-generated tags | `["calendar", "meeting", "virtual"]` |
 | **Metadata** | Additional event data | Event ID, status, organizer |
 
-### Auto-Generated Tags
 
-- `calendar` - All calendar events
-- `meeting` - All calendar events are tagged as meetings
-- `virtual` - Events without a physical location
-- `in-person` - Events with a physical location specified
 
 ## Security Considerations
 

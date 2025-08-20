@@ -175,11 +175,6 @@ func TestYouTrackConnector_ConvertActivity(t *testing.T) {
 		t.Errorf("Expected URL 'https://example.youtrack.cloud/issue/TEST-123', got '%s'", activity.URL)
 	}
 
-	expectedTags := []string{"youtrack", "issue", "field-update", "test project"}
-	if len(activity.Tags) != len(expectedTags) {
-		t.Errorf("Expected %d tags, got %d", len(expectedTags), len(activity.Tags))
-	}
-
 	// Check metadata
 	if activity.Metadata["category"] != "CustomFieldCategory" {
 		t.Errorf("Expected category 'CustomFieldCategory', got '%s'", activity.Metadata["category"])
@@ -543,17 +538,6 @@ func TestYouTrackConnector_ConvertActivity_CommentCategory(t *testing.T) {
 		t.Errorf("Expected description 'Added a comment', got '%s'", activity.Description)
 	}
 
-	// Check for comment tag
-	hasCommentTag := false
-	for _, tag := range activity.Tags {
-		if tag == "comment" {
-			hasCommentTag = true
-			break
-		}
-	}
-	if !hasCommentTag {
-		t.Error("Expected 'comment' tag in activity tags")
-	}
 }
 
 func TestYouTrackConnector_TestConnection_MissingConfig(t *testing.T) {

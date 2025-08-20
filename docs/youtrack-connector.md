@@ -608,7 +608,7 @@ The YouTrack connector now displays the actual field values when changes are mad
 ### Supported Value Types
 - **Simple text fields**: State, Priority, Resolution
 - **User fields**: Assignee, Reporter (displays name or login)
-- **Multi-value fields**: Tags, Components (displays comma-separated list)
+- **Multi-value fields**: Components (displays comma-separated list)
 - **Custom fields**: Any custom field type supported by YouTrack
 
 ### Display Format

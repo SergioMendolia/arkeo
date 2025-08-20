@@ -186,7 +186,6 @@ func (g *GitHubConnector) getCommits(ctx context.Context, date time.Time) ([]tim
 			Timestamp:   commitTime,
 			Source:      "github",
 			URL:         item.HTMLURL,
-			Tags:        []string{"git", "commit", item.Repository.Name},
 			Metadata: map[string]string{
 				"repository": item.Repository.FullName,
 				"sha":        item.SHA,
@@ -275,11 +274,9 @@ func (g *GitHubConnector) getIssuesAndPRs(ctx context.Context, date time.Time) (
 			}
 
 			activityType := timeline.ActivityTypeJira // Using as generic issue type
-			tags := []string{"github", "issue", item.Repository.Name}
 			title := fmt.Sprintf("#%d: %s", item.Number, item.Title)
 
 			if item.PullRequest != nil {
-				tags = append(tags, "pull-request")
 				title = fmt.Sprintf("PR #%d: %s", item.Number, item.Title)
 			}
 
@@ -291,7 +288,6 @@ func (g *GitHubConnector) getIssuesAndPRs(ctx context.Context, date time.Time) (
 				Timestamp:   updatedTime,
 				Source:      "github",
 				URL:         item.HTMLURL,
-				Tags:        tags,
 				Metadata: map[string]string{
 					"repository": item.Repository.FullName,
 					"number":     strconv.Itoa(item.Number),

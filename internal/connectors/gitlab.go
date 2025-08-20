@@ -460,12 +460,6 @@ func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTim
 		description += fmt.Sprintf(" (%d commits)", event.PushData.CommitCount)
 	}
 
-	// Build tags
-	tags := []string{"gitlab", "push", event.PushData.Ref}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
-	}
-
 	// Generate URL - try to link to the commits
 	var activityURL string
 	if event.Project != nil && event.PushData.CommitTo != "" {
@@ -489,7 +483,6 @@ func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTim
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata: map[string]string{
 			"event_id":     fmt.Sprintf("%d", event.ID),
 			"action_name":  event.ActionName,
@@ -521,12 +514,6 @@ func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, 
 		description += fmt.Sprintf(" (!%d)", *event.TargetIID)
 	}
 
-	// Build tags
-	tags := []string{"gitlab", "merge-request", event.ActionName}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
-	}
-
 	// Generate URL
 	var activityURL string
 	if event.Project != nil && event.TargetIID != nil {
@@ -555,7 +542,6 @@ func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, 
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }
@@ -581,12 +567,6 @@ func (g *GitLabConnector) convertIssueEventToActivity(event GitLabEvent, eventTi
 
 	if event.TargetIID != nil {
 		description += fmt.Sprintf(" (#%d)", *event.TargetIID)
-	}
-
-	// Build tags
-	tags := []string{"gitlab", "issue", action}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
 	}
 
 	// Generate URL
@@ -617,7 +597,6 @@ func (g *GitLabConnector) convertIssueEventToActivity(event GitLabEvent, eventTi
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }
@@ -653,12 +632,6 @@ func (g *GitLabConnector) convertCommentEventToActivity(event GitLabEvent, event
 		description = fmt.Sprintf("Commented on %s in %s", targetType, event.Project.PathWithNamespace)
 	} else {
 		description = fmt.Sprintf("Commented on %s", targetType)
-	}
-
-	// Build tags
-	tags := []string{"gitlab", "comment", targetType}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
 	}
 
 	// Generate URL - this is more complex as we need to determine the right URL format
@@ -697,7 +670,6 @@ func (g *GitLabConnector) convertCommentEventToActivity(event GitLabEvent, event
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }
@@ -716,12 +688,6 @@ func (g *GitLabConnector) convertProjectEventToActivity(event GitLabEvent, event
 		description = fmt.Sprintf("Created new project %s", event.Project.PathWithNamespace)
 	} else {
 		description = "Created new project"
-	}
-
-	// Build tags
-	tags := []string{"gitlab", "project", "created"}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
 	}
 
 	// Generate URL
@@ -747,7 +713,6 @@ func (g *GitLabConnector) convertProjectEventToActivity(event GitLabEvent, event
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }
@@ -770,15 +735,6 @@ func (g *GitLabConnector) convertGenericEventToActivity(event GitLabEvent, event
 
 	if event.TargetType != nil {
 		description += fmt.Sprintf(" (%s)", strings.ToLower(*event.TargetType))
-	}
-
-	// Build tags
-	tags := []string{"gitlab", strings.ToLower(event.ActionName)}
-	if event.TargetType != nil {
-		tags = append(tags, strings.ToLower(*event.TargetType))
-	}
-	if event.Project != nil {
-		tags = append(tags, event.Project.Path)
 	}
 
 	// Generate URL
@@ -810,7 +766,6 @@ func (g *GitLabConnector) convertGenericEventToActivity(event GitLabEvent, event
 		Timestamp:   eventTime,
 		Source:      "gitlab",
 		URL:         activityURL,
-		Tags:        tags,
 		Metadata:    metadata,
 	}
 }

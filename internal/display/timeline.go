@@ -148,10 +148,6 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 		fmt.Printf("%s   🔗 %s\n", prefix, activity.URL)
 	}
 
-	// Show tags if details requested
-	if opts.ShowDetails && len(activity.Tags) > 0 {
-		fmt.Printf("%s   🏷️  %s\n", prefix, strings.Join(activity.Tags, ", "))
-	}
 }
 
 // filterByType filters activities by type

@@ -31,7 +31,6 @@ type Activity struct {
 	Duration    *time.Duration    `json:"duration,omitempty"`
 	Source      string            `json:"source"` // e.g., "github", "google-calendar"
 	URL         string            `json:"url,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
@@ -172,14 +171,4 @@ func (a *Activity) FormatDuration() string {
 		minutes := int(duration.Minutes()) % 60
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
-}
-
-// HasTag checks if the activity has a specific tag
-func (a *Activity) HasTag(tag string) bool {
-	for _, t := range a.Tags {
-		if t == tag {
-			return true
-		}
-	}
-	return false
 }
