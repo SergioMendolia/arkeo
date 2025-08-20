@@ -123,8 +123,8 @@ autotime timeline --max 20
 # Export as CSV
 autotime timeline --format csv
 
-# Group activities chronologically instead of by hour
-autotime timeline --group=false
+# Group activities by hour (default is chronological)
+autotime timeline --group=true
 ```
 
 ### Connector Management
@@ -200,7 +200,7 @@ connectors:
 ui:
   default_view: "timeline"
   show_timestamps: true
-  group_by_interval: "1h"
+  # group_by_interval: "1h"  # Not yet implemented
   page_size: 50
 
 storage:

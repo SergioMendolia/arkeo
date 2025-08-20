@@ -181,7 +181,7 @@ func init() {
 	timelineCmd.Flags().IntVar(&maxItems, "max", 50, "maximum number of activities to show")
 	timelineCmd.Flags().StringVar(&filterType, "type", "", "filter by activity type")
 	timelineCmd.Flags().StringVar(&filterSource, "source", "", "filter by activity source")
-	timelineCmd.Flags().BoolVar(&groupByHour, "group", true, "group activities by hour")
+	timelineCmd.Flags().BoolVar(&groupByHour, "group", false, "group activities by hour")
 
 	// Connectors subcommands
 	connectorsCmd.AddCommand(&cobra.Command{

@@ -24,8 +24,8 @@ func DefaultTimelineOptions() TimelineOptions {
 	return TimelineOptions{
 		ShowDetails:    false,
 		ShowTimestamps: true,
-		GroupByHour:    true,
-		MaxItems:       50,
+		GroupByHour:    false,
+		MaxItems:       500,
 		Format:         "table",
 	}
 }
@@ -110,31 +110,25 @@ func displayChronological(activities []timeline.Activity, opts TimelineOptions) 
 	fmt.Println("Activities (chronological order):")
 	fmt.Println(strings.Repeat("═", 60))
 
-	for i, activity := range activities {
+	for _, activity := range activities {
 		displayActivity(activity, opts, "")
 
-		if i < len(activities)-1 {
-			fmt.Println(strings.Repeat("─", 40))
-		}
 	}
 }
 
 // displayActivity shows a single activity
 func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix string) {
-	icon := getActivityIcon(activity.Type)
 
 	// Basic info line
 	if opts.ShowTimestamps {
-		fmt.Printf("%s%s %s [%s] %s\n",
+		fmt.Printf("%s%s [%s] %s\n",
 			prefix,
 			activity.Timestamp.Format("15:04"),
-			icon,
 			activity.Source,
 			activity.Title)
 	} else {
-		fmt.Printf("%s%s [%s] %s\n",
+		fmt.Printf("%s [%s] %s\n",
 			prefix,
-			icon,
 			activity.Source,
 			activity.Title)
 	}
@@ -157,28 +151,6 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 	// Show tags if details requested
 	if opts.ShowDetails && len(activity.Tags) > 0 {
 		fmt.Printf("%s   🏷️  %s\n", prefix, strings.Join(activity.Tags, ", "))
-	}
-}
-
-// getActivityIcon returns an appropriate icon for the activity type
-func getActivityIcon(activityType timeline.ActivityType) string {
-	switch activityType {
-	case timeline.ActivityTypeGitCommit:
-		return "💻"
-	case timeline.ActivityTypeCalendar:
-		return "📅"
-	case timeline.ActivityTypeSlack:
-		return "💬"
-	case timeline.ActivityTypeJira:
-		return "🎫"
-	case timeline.ActivityTypeFile:
-		return "📁"
-	case timeline.ActivityTypeBrowser:
-		return "🌐"
-	case timeline.ActivityTypeApplication:
-		return "🖥️"
-	default:
-		return "📋"
 	}
 }
 
@@ -260,8 +232,7 @@ func DisplaySummary(tl *timeline.Timeline) {
 
 		fmt.Println("\n📈 By Activity Type:")
 		for actType, count := range summary.ByType {
-			icon := getActivityIcon(actType)
-			fmt.Printf("   %s %-15s %d\n", icon, actType, count)
+			fmt.Printf("   %-15s %d\n", actType, count)
 		}
 
 		fmt.Println("\n🔗 By Source:")
