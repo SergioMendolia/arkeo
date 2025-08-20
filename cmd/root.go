@@ -24,6 +24,13 @@ var (
 	groupByHour bool
 )
 
+var version = "dev" // Will be set by SetVersion function
+
+// SetVersion sets the application version
+func SetVersion(v string) {
+	version = v
+}
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "autotime",
@@ -165,7 +172,7 @@ var versionCmd = &cobra.Command{
 	Short: "Show version information",
 	Long:  `Display version information for AutoTime.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("AutoTime v0.1.0")
+		fmt.Printf("AutoTime %s\n", version)
 		fmt.Println("Daily Activity Timeline Builder")
 		fmt.Println("Built with ❤️  using Go and Cobra")
 	},

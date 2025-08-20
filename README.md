@@ -296,6 +296,44 @@ autotime connectors info <name>
 autotime config validate
 ```
 
+## GitHub Actions & CI/CD
+
+This project includes automated workflows for continuous integration and deployment:
+
+### Test Workflow
+- **Trigger**: Push to `main`/`develop` branches, pull requests
+- **Actions**:
+  - Runs tests on Go 1.21 and 1.22
+  - Performs code linting with golangci-lint
+  - Checks code formatting and vetting
+  - Uploads test coverage to Codecov
+
+### Release Workflow  
+- **Trigger**: Git tags matching `v*` (e.g., `v1.0.0`)
+- **Actions**:
+  - Builds binaries for multiple platforms (Linux, macOS, Windows)
+  - Creates release archives (.tar.gz for Unix, .zip for Windows)
+  - Automatically generates changelog from git commits
+  - Creates GitHub release with downloadable assets
+
+### Creating a Release
+```bash
+# Tag a new version
+git tag v1.0.0
+git push origin v1.0.0
+
+# GitHub Actions will automatically:
+# 1. Run all tests
+# 2. Build multi-platform binaries
+# 3. Create release archives
+# 4. Publish GitHub release
+```
+
+The release will include binaries for:
+- Linux (AMD64, ARM64)
+- macOS (Intel, Apple Silicon)
+- Windows (AMD64)
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

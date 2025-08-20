@@ -17,7 +17,7 @@ GOMOD=$(GOCMD) mod
 GOFMT=$(GOCMD) fmt
 
 # Build flags
-LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+LDFLAGS=-ldflags "-s -w -X 'main.version=$(VERSION)'"
 BUILD_FLAGS=-v $(LDFLAGS)
 
 # Default target

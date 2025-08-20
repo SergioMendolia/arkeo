@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          # Windows on ARM64 is not commonly used
+          - goos: windows
+            goarch: arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test ./...
+
+    - name: Set binary name
+      id: binary
+      run: |
+        BINARY_NAME="autotime"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        echo "name=${BINARY_NAME}" >> $GITHUB_OUTPUT
+        
+        # Create archive name
+        ARCHIVE_NAME="autotime-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          ARCHIVE_NAME="${ARCHIVE_NAME}.zip"
+        else
+          ARCHIVE_NAME="${ARCHIVE_NAME}.tar.gz"
+        fi
+        echo "archive=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -ldflags="-s -w -X 'main.version=${{ github.ref_name }}'" -o ${{ steps.binary.outputs.name }} .
+
+    - name: Create archive (Linux/macOS)
+      if: matrix.goos != 'windows'
+      run: |
+        tar -czf ${{ steps.binary.outputs.archive }} ${{ steps.binary.outputs.name }} README.md LICENSE config.example.yaml
+
+    - name: Create archive (Windows)
+      if: matrix.goos == 'windows'
+      run: |
+        zip ${{ steps.binary.outputs.archive }} ${{ steps.binary.outputs.name }} README.md LICENSE config.example.yaml
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ steps.binary.outputs.archive }}
+        path: ${{ steps.binary.outputs.archive }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+
+    - name: Move artifacts to root
+      run: |
+        find ./artifacts -name "*.tar.gz" -o -name "*.zip" | while read file; do
+          mv "$file" ./
+        done
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Extract version from tag
+        VERSION=${{ github.ref_name }}
+        
+        # Create a simple changelog
+        cat > CHANGELOG.md << EOF
+        ## Changes in $VERSION
+        
+        $(git log --oneline --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD || echo "- Initial release")
+        
+        ## Installation
+        
+        Download the appropriate binary for your platform from the assets below.
+        
+        ### Linux/macOS
+        \`\`\`bash
+        # Extract the archive
+        tar -xzf autotime-$VERSION-linux-amd64.tar.gz
+        
+        # Make executable and move to PATH
+        chmod +x autotime
+        sudo mv autotime /usr/local/bin/
+        \`\`\`
+        
+        ### Windows
+        \`\`\`powershell
+        # Extract the zip file and add to PATH
+        # Or place autotime.exe in a directory that's already in your PATH
+        \`\`\`
+        
+        ## Usage
+        
+        \`\`\`bash
+        # Show help
+        autotime --help
+        
+        # Show today's timeline
+        autotime timeline
+        
+        # Show detailed timeline
+        autotime timeline --details
+        \`\`\`
+        EOF
+
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "*.tar.gz,*.zip"
+        bodyFile: "CHANGELOG.md"
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        token: ${{ secrets.GITHUB_TOKEN }}
