@@ -1,0 +1,104 @@
+# AutoTime Configuration Example
+# Copy this file to ~/.config/autotime/config.yaml and customize as needed
+
+# Application settings
+app:
+  # Date format for display (Go time format)
+  date_format: "2006-01-02"
+
+  # Timezone for activity timestamps
+  timezone: "Local"
+
+  # Application logging level (debug, info, warn, error)
+  log_level: "info"
+
+  # How long to cache connector data
+  cache_duration: "1h"
+
+# Connector configurations
+connectors:
+  # GitHub connector - fetches commits, issues, and PRs
+  github:
+    enabled: false
+    config:
+      # Get a personal access token from: https://github.com/settings/tokens
+      # Requires 'repo' scope for private repos, 'public_repo' for public only
+      token: "ghp_your_github_token_here"
+
+      # Your GitHub username
+      username: "your-username"
+
+      # Include activities from private repositories
+      include_private: false
+
+    # How often to refresh GitHub data
+    refresh_interval: "15m"
+
+  # Google Calendar connector - fetches calendar events
+  calendar:
+    enabled: false
+    config:
+      # Calendar provider (google, outlook, caldav)
+      provider: "google"
+
+      # OAuth2 credentials from Google Cloud Console
+      # Create credentials at: https://console.cloud.google.com/apis/credentials
+      client_id: "your-client-id.apps.googleusercontent.com"
+      client_secret: "your-client-secret"
+
+      # OAuth2 refresh token (obtained during initial authentication)
+      refresh_token: "your-refresh-token"
+
+      # Calendar IDs to monitor (comma-separated)
+      # Use "primary" for your main calendar
+      calendar_ids: "primary"
+
+      # Include declined calendar events
+      include_declined: false
+
+    refresh_interval: "10m"
+
+  # GitLab connector - fetches user activities from Atom feeds
+  gitlab:
+    enabled: false
+    config:
+      # GitLab instance URL (defaults to https://gitlab.com)
+      gitlab_url: "https://gitlab.com"
+
+      # Your GitLab username
+      username: "your-username"
+
+      # GitLab feed token from Profile > Edit Profile > Access tokens > Feed token
+      # This token is used to access your activity feed via RSS/Atom
+      feed_token: "your-gitlab-feed-token"
+
+    refresh_interval: "15m"
+
+
+# User interface settings
+ui:
+  # Default view when starting the app (timeline, connectors, settings)
+  default_view: "timeline"
+
+  # Color theme (default, dark, light)
+  theme: "default"
+
+  # Show timestamps in timeline view
+  show_timestamps: true
+
+  # Time interval for grouping activities (15m, 30m, 1h, 2h, 4h)
+  group_by_interval: "1h"
+
+  # Maximum items to show per page
+  page_size: 50
+
+# Data storage settings
+storage:
+  # Storage type (file, memory)
+  type: "file"
+
+  # Storage location for file-based storage
+  location: "data"
+
+  # Days to keep activity data
+  retention_days: 90
