@@ -7,6 +7,7 @@ app:
   date_format: "2006-01-02"
 
   # Application logging level (debug, info, warn, error)
+  # Set to "debug" to enable detailed logging for connectors
   log_level: "info"
 
 # Connector configurations
@@ -27,27 +28,21 @@ connectors:
 
 
 
-  # Google Calendar connector - fetches calendar events
+  # Google Calendar connector - fetches calendar events using secret iCal URLs
   calendar:
     enabled: false
     config:
-      # Calendar provider (google, outlook, caldav)
-      provider: "google"
-
-      # OAuth2 credentials from Google Cloud Console
-      # Create credentials at: https://console.cloud.google.com/apis/credentials
-      client_id: "your-client-id.apps.googleusercontent.com"
-      client_secret: "your-client-secret"
-
-      # OAuth2 refresh token (obtained during initial authentication)
-      refresh_token: "your-refresh-token"
-
-      # Calendar IDs to monitor (comma-separated)
-      # Use "primary" for your main calendar
-      calendar_ids: "primary"
+      # Google Calendar secret iCal URLs (comma-separated)
+      # Get these from: Google Calendar > Settings and sharing > Integrate calendar > Secret address in iCal format
+      # Format: https://calendar.google.com/calendar/ical/[calendar-id]/[secret-key]/basic.ics
+      ical_urls: "https://calendar.google.com/calendar/ical/your-email@gmail.com/private-abc123def456/basic.ics"
 
       # Include declined calendar events
       include_declined: false
+
+      # Enable debug logging for calendar connector (optional)
+      # This can also be set globally via app.log_level or environment variable LOG_LEVEL=debug
+      # log_level: "debug"
 
 
 

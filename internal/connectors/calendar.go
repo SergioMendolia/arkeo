@@ -1,18 +1,19 @@
 package connectors
 
 import (
+	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/autotime/autotime/internal/timeline"
 )
 
-// CalendarConnector implements the Connector interface for calendar services
+// CalendarConnector implements the Connector interface for Google Calendar using iCal feeds
 type CalendarConnector struct {
 	*BaseConnector
 	httpClient *http.Client
@@ -23,7 +24,7 @@ func NewCalendarConnector() *CalendarConnector {
 	return &CalendarConnector{
 		BaseConnector: NewBaseConnector(
 			"calendar",
-			"Fetches calendar events and meetings",
+			"Fetches Google Calendar events using secret iCal URLs",
 		),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -35,36 +36,10 @@ func NewCalendarConnector() *CalendarConnector {
 func (c *CalendarConnector) GetRequiredConfig() []ConfigField {
 	return []ConfigField{
 		{
-			Key:         "provider",
+			Key:         "ical_urls",
 			Type:        "string",
 			Required:    true,
-			Description: "Calendar provider (google, outlook, caldav)",
-			Default:     "google",
-		},
-		{
-			Key:         "client_id",
-			Type:        "string",
-			Required:    true,
-			Description: "OAuth Client ID",
-		},
-		{
-			Key:         "client_secret",
-			Type:        "secret",
-			Required:    true,
-			Description: "OAuth Client Secret",
-		},
-		{
-			Key:         "refresh_token",
-			Type:        "secret",
-			Required:    false,
-			Description: "OAuth Refresh Token (will be obtained during auth)",
-		},
-		{
-			Key:         "calendar_ids",
-			Type:        "string",
-			Required:    false,
-			Description: "Comma-separated list of calendar IDs (default: primary)",
-			Default:     "primary",
+			Description: "Comma-separated list of Google Calendar secret iCal URLs",
 		},
 		{
 			Key:         "include_declined",
@@ -78,249 +53,237 @@ func (c *CalendarConnector) GetRequiredConfig() []ConfigField {
 
 // ValidateConfig validates the calendar configuration
 func (c *CalendarConnector) ValidateConfig(config map[string]interface{}) error {
-	provider, ok := config["provider"].(string)
-	if !ok || provider == "" {
-		return fmt.Errorf("calendar provider is required")
+	icalURLs, ok := config["ical_urls"].(string)
+	if !ok || icalURLs == "" {
+		return fmt.Errorf("ical_urls is required")
 	}
 
-	validProviders := []string{"google", "outlook", "caldav"}
-	isValid := false
-	for _, valid := range validProviders {
-		if provider == valid {
-			isValid = true
-			break
+	// Validate that URLs look like Google Calendar iCal URLs
+	urls := c.parseICalURLs(icalURLs)
+	for _, url := range urls {
+		if !c.isValidGoogleCalendarURL(url) {
+			return fmt.Errorf("invalid Google Calendar iCal URL: %s", url)
 		}
-	}
-	if !isValid {
-		return fmt.Errorf("invalid provider: %s. Must be one of: %s", provider, strings.Join(validProviders, ", "))
-	}
-
-	clientID, ok := config["client_id"].(string)
-	if !ok || clientID == "" {
-		return fmt.Errorf("client_id is required")
-	}
-
-	clientSecret, ok := config["client_secret"].(string)
-	if !ok || clientSecret == "" {
-		return fmt.Errorf("client_secret is required")
 	}
 
 	return nil
+}
+
+// isDebugMode checks if debug logging is enabled
+func (c *CalendarConnector) isDebugMode() bool {
+	// Check if log_level in config is set to debug
+	if logLevel, ok := c.config["log_level"].(string); ok {
+		return strings.ToLower(logLevel) == "debug"
+	}
+	// Also check environment variables
+	return strings.ToLower(strings.TrimSpace(c.GetConfigString("log_level"))) == "debug"
 }
 
 // TestConnection tests the calendar connection
 func (c *CalendarConnector) TestConnection(ctx context.Context) error {
-	provider := c.GetConfigString("provider")
+	urls := c.parseICalURLs(c.GetConfigString("ical_urls"))
 
-	switch provider {
-	case "google":
-		return c.testGoogleConnection(ctx)
-	case "outlook":
-		return c.testOutlookConnection(ctx)
-	case "caldav":
-		return c.testCalDAVConnection(ctx)
-	default:
-		return fmt.Errorf("unsupported provider: %s", provider)
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Testing connection to %d calendar(s)", len(urls))
 	}
+
+	for i, url := range urls {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Testing calendar %d: %s", i+1, c.maskURL(url))
+		}
+		if err := c.testICalURL(ctx, url); err != nil {
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Failed to connect to calendar %d: %v", i+1, err)
+			}
+			return fmt.Errorf("failed to connect to calendar %d (%s): %v", i+1, c.maskURL(url), err)
+		}
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Successfully connected to calendar %d", i+1)
+		}
+	}
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: All %d calendar(s) connected successfully", len(urls))
+	}
+
+	return nil
 }
 
 // GetActivities retrieves calendar activities for the specified date
 func (c *CalendarConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
-	provider := c.GetConfigString("provider")
-
-	switch provider {
-	case "google":
-		return c.getGoogleCalendarEvents(ctx, date)
-	case "outlook":
-		return c.getOutlookCalendarEvents(ctx, date)
-	case "caldav":
-		return c.getCalDAVEvents(ctx, date)
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
-	}
-}
-
-// testGoogleConnection tests Google Calendar connection
-func (c *CalendarConnector) testGoogleConnection(ctx context.Context) error {
-	token, err := c.getAccessToken(ctx)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/calendar/v3/calendars/primary", nil)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("google calendar API returned status %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-// testOutlookConnection tests Outlook Calendar connection
-func (c *CalendarConnector) testOutlookConnection(ctx context.Context) error {
-	token, err := c.getAccessToken(ctx)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://graph.microsoft.com/v1.0/me/calendars", nil)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("outlook calendar API returned status %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-// testCalDAVConnection tests CalDAV connection
-func (c *CalendarConnector) testCalDAVConnection(ctx context.Context) error {
-	// CalDAV implementation would go here
-	return fmt.Errorf("CalDAV support not yet implemented")
-}
-
-// getGoogleCalendarEvents retrieves events from Google Calendar
-func (c *CalendarConnector) getGoogleCalendarEvents(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
-	token, err := c.getAccessToken(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	calendarIDs := c.getCalendarIDs()
+	urls := c.parseICalURLs(c.GetConfigString("ical_urls"))
 	var allActivities []timeline.Activity
 
-	for _, calendarID := range calendarIDs {
-		events, err := c.fetchGoogleEvents(ctx, token, calendarID, date)
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Fetching events for date %s from %d calendar(s)", date.Format("2006-01-02"), len(urls))
+	}
+
+	for i, url := range urls {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Processing calendar %d: %s", i+1, c.maskURL(url))
+		}
+		activities, err := c.fetchCalendarEvents(ctx, url, date)
 		if err != nil {
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Failed to fetch events from calendar %d: %v", i+1, err)
+			}
 			// Log error but continue with other calendars
 			continue
 		}
-		allActivities = append(allActivities, events...)
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Found %d events from calendar %d", len(activities), i+1)
+		}
+		allActivities = append(allActivities, activities...)
+	}
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Total activities found: %d", len(allActivities))
 	}
 
 	return allActivities, nil
 }
 
-// fetchGoogleEvents fetches events from a specific Google calendar
-func (c *CalendarConnector) fetchGoogleEvents(ctx context.Context, token, calendarID string, date time.Time) ([]timeline.Activity, error) {
-	timeMin := date.Format(time.RFC3339)
-	timeMax := date.Add(24 * time.Hour).Format(time.RFC3339)
+// parseICalURLs splits the comma-separated URLs and trims whitespace
+func (c *CalendarConnector) parseICalURLs(urls string) []string {
+	if urls == "" {
+		return []string{}
+	}
 
-	params := url.Values{}
-	params.Set("timeMin", timeMin)
-	params.Set("timeMax", timeMax)
-	params.Set("singleEvents", "true")
-	params.Set("orderBy", "startTime")
-	params.Set("maxResults", "250")
+	parts := strings.Split(urls, ",")
+	var result []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
 
-	url := fmt.Sprintf("https://www.googleapis.com/calendar/v3/calendars/%s/events?%s",
-		url.QueryEscape(calendarID), params.Encode())
+// isValidGoogleCalendarURL checks if the URL looks like a valid Google Calendar iCal URL
+func (c *CalendarConnector) isValidGoogleCalendarURL(url string) bool {
+	// Google Calendar iCal URLs follow this pattern:
+	// https://calendar.google.com/calendar/ical/[calendar-id]/[secret]/basic.ics
+	pattern := `^https://calendar\.google\.com/calendar/ical/[^/]+/[^/]+/basic\.ics$`
+	matched, _ := regexp.MatchString(pattern, url)
+	return matched
+}
+
+// maskURL masks the secret part of the URL for logging
+func (c *CalendarConnector) maskURL(url string) string {
+	// Replace the secret part with asterisks
+	re := regexp.MustCompile(`(https://calendar\.google\.com/calendar/ical/[^/]+/)([^/]+)(/basic\.ics)`)
+	return re.ReplaceAllString(url, "${1}***${3}")
+}
+
+// testICalURL tests connectivity to a single iCal URL
+func (c *CalendarConnector) testICalURL(ctx context.Context, url string) error {
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Making HTTP request to %s", c.maskURL(url))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Response status: %d %s", resp.StatusCode, resp.Status)
+		log.Printf("Calendar Debug: Content-Type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d: failed to fetch calendar data", resp.StatusCode)
+	}
+
+	// Check if response looks like iCal data
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/calendar") && !strings.Contains(contentType, "text/plain") {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Unexpected content type: %s", contentType)
+		}
+		return fmt.Errorf("unexpected content type: %s", contentType)
+	}
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Successfully validated iCal response")
+	}
+
+	return nil
+}
+
+// fetchCalendarEvents fetches and parses events from an iCal URL for a specific date
+func (c *CalendarConnector) fetchCalendarEvents(ctx context.Context, url string, date time.Time) ([]timeline.Activity, error) {
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Fetching calendar data from %s", c.maskURL(url))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: HTTP response: %d %s", resp.StatusCode, resp.Status)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("google calendar API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("HTTP %d: failed to fetch calendar data", resp.StatusCode)
 	}
 
-	var calendarResponse struct {
-		Items []struct {
-			ID          string `json:"id"`
-			Summary     string `json:"summary"`
-			Description string `json:"description"`
-			Location    string `json:"location"`
-			Status      string `json:"status"`
-			HTMLLink    string `json:"htmlLink"`
-			Start       struct {
-				DateTime string `json:"dateTime"`
-				Date     string `json:"date"`
-			} `json:"start"`
-			End struct {
-				DateTime string `json:"dateTime"`
-				Date     string `json:"date"`
-			} `json:"end"`
-			Attendees []struct {
-				Email          string `json:"email"`
-				ResponseStatus string `json:"responseStatus"`
-				Self           bool   `json:"self"`
-			} `json:"attendees"`
-			Creator struct {
-				Email string `json:"email"`
-			} `json:"creator"`
-		} `json:"items"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&calendarResponse); err != nil {
+	events, err := c.parseICalData(resp.Body)
+	if err != nil {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Failed to parse iCal data: %v", err)
+		}
 		return nil, err
 	}
 
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Parsed %d total events from iCal data", len(events))
+	}
+
+	// Filter events for the specific date
 	var activities []timeline.Activity
+	targetDate := date.Format("2006-01-02")
 	includeDeclined := c.GetConfigBool("include_declined")
+	filteredCount := 0
+	declinedSkipped := 0
 
-	for _, event := range calendarResponse.Items {
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Filtering events for target date: %s", targetDate)
+		log.Printf("Calendar Debug: Include declined events: %t", includeDeclined)
+	}
+
+	for _, event := range events {
+		eventDate := event.StartTime.Format("2006-01-02")
+		if eventDate != targetDate {
+			continue
+		}
+		filteredCount++
+
 		// Skip declined events if configured to do so
-		if !includeDeclined {
-			for _, attendee := range event.Attendees {
-				if attendee.Self && attendee.ResponseStatus == "declined" {
-					continue
-				}
+		if !includeDeclined && event.Status == "DECLINED" {
+			declinedSkipped++
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Skipping declined event: %s", event.Summary)
 			}
-		}
-
-		// Parse start and end times
-		var startTime, endTime time.Time
-		var err error
-
-		if event.Start.DateTime != "" {
-			startTime, err = time.Parse(time.RFC3339, event.Start.DateTime)
-		} else if event.Start.Date != "" {
-			startTime, err = time.Parse("2006-01-02", event.Start.Date)
-		}
-		if err != nil {
 			continue
 		}
 
-		if event.End.DateTime != "" {
-			endTime, err = time.Parse(time.RFC3339, event.End.DateTime)
-		} else if event.End.Date != "" {
-			endTime, err = time.Parse("2006-01-02", event.End.Date)
-		}
-		if err != nil {
-			continue
-		}
-
-		duration := endTime.Sub(startTime)
+		duration := event.EndTime.Sub(event.StartTime)
 
 		tags := []string{"calendar", "meeting"}
 		if event.Location != "" {
@@ -330,78 +293,203 @@ func (c *CalendarConnector) fetchGoogleEvents(ctx context.Context, token, calend
 		}
 
 		metadata := map[string]string{
-			"calendar_id": calendarID,
-			"event_id":    event.ID,
-			"status":      event.Status,
+			"event_id": event.UID,
+			"status":   event.Status,
 		}
 
 		if event.Location != "" {
 			metadata["location"] = event.Location
 		}
-		if event.Creator.Email != "" {
-			metadata["creator"] = event.Creator.Email
+		if event.Organizer != "" {
+			metadata["organizer"] = event.Organizer
 		}
 
 		activity := timeline.Activity{
-			ID:          fmt.Sprintf("calendar-google-%s", event.ID),
+			ID:          fmt.Sprintf("calendar-google-%s", event.UID),
 			Type:        timeline.ActivityTypeCalendar,
 			Title:       event.Summary,
 			Description: event.Description,
-			Timestamp:   startTime,
+			Timestamp:   event.StartTime,
 			Duration:    &duration,
 			Source:      "calendar",
-			URL:         event.HTMLLink,
+			URL:         event.URL,
 			Tags:        tags,
 			Metadata:    metadata,
 		}
 
 		activities = append(activities, activity)
+
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Added event: %s at %s (duration: %v)",
+				event.Summary, event.StartTime.Format("15:04"), duration)
+		}
+	}
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Events for target date: %d", filteredCount)
+		log.Printf("Calendar Debug: Declined events skipped: %d", declinedSkipped)
+		log.Printf("Calendar Debug: Final activities created: %d", len(activities))
 	}
 
 	return activities, nil
 }
 
-// getOutlookCalendarEvents retrieves events from Outlook Calendar
-func (c *CalendarConnector) getOutlookCalendarEvents(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
-	// Outlook implementation would go here - similar structure to Google
-	return nil, fmt.Errorf("Outlook calendar support not yet implemented")
+// ICalEvent represents a parsed iCal event
+type ICalEvent struct {
+	UID         string
+	Summary     string
+	Description string
+	Location    string
+	StartTime   time.Time
+	EndTime     time.Time
+	Status      string
+	Organizer   string
+	URL         string
 }
 
-// getCalDAVEvents retrieves events from CalDAV server
-func (c *CalendarConnector) getCalDAVEvents(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
-	// CalDAV implementation would go here
-	return nil, fmt.Errorf("CalDAV support not yet implemented")
+// parseICalData parses iCal format data and extracts events
+func (c *CalendarConnector) parseICalData(body interface{}) ([]ICalEvent, error) {
+	var events []ICalEvent
+	var currentEvent *ICalEvent
+	lineCount := 0
+	eventCount := 0
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Starting to parse iCal data")
+	}
+
+	scanner := bufio.NewScanner(body.(interface{ Read([]byte) (int, error) }))
+
+	for scanner.Scan() {
+		lineCount++
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "BEGIN:VEVENT" {
+			currentEvent = &ICalEvent{}
+			eventCount++
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Found event %d at line %d", eventCount, lineCount)
+			}
+		} else if line == "END:VEVENT" && currentEvent != nil {
+			if currentEvent.Summary != "" {
+				events = append(events, *currentEvent)
+				if c.isDebugMode() {
+					log.Printf("Calendar Debug: Completed parsing event: %s (Start: %s)",
+						currentEvent.Summary, currentEvent.StartTime.Format("2006-01-02 15:04"))
+				}
+			} else {
+				if c.isDebugMode() {
+					log.Printf("Calendar Debug: Skipping event with empty summary")
+				}
+			}
+			currentEvent = nil
+		} else if currentEvent != nil {
+			c.parseICalLine(line, currentEvent)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Scanner error: %v", err)
+		}
+		return nil, err
+	}
+
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Parsed %d lines, found %d events, extracted %d valid events",
+			lineCount, eventCount, len(events))
+	}
+
+	return events, nil
 }
 
-// getAccessToken retrieves or refreshes the access token
-func (c *CalendarConnector) getAccessToken(ctx context.Context) (string, error) {
-	// This would implement OAuth token refresh logic
-	// For now, assume we have a valid refresh token stored
-	refreshToken := c.GetConfigString("refresh_token")
-	if refreshToken == "" {
-		return "", fmt.Errorf("no refresh token available - please re-authenticate")
+// parseICalLine parses a single line from iCal data
+func (c *CalendarConnector) parseICalLine(line string, event *ICalEvent) {
+	// Handle line folding (lines starting with space or tab are continuations)
+	if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+		return // Skip folded lines for simplicity
 	}
 
-	// TODO: Implement token refresh logic
-	// This is a placeholder - in a real implementation you would:
-	// 1. Use the refresh token to get a new access token
-	// 2. Handle token expiration
-	// 3. Store the new tokens securely
+	// Split property and value
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return
+	}
 
-	return "", fmt.Errorf("token refresh not yet implemented")
+	property := parts[0]
+	value := parts[1]
+
+	// Handle properties with parameters (e.g., "DTSTART;TZID=America/New_York")
+	propParts := strings.SplitN(property, ";", 2)
+	propName := propParts[0]
+
+	switch propName {
+	case "UID":
+		event.UID = value
+	case "SUMMARY":
+		event.Summary = c.unescapeICalValue(value)
+	case "DESCRIPTION":
+		event.Description = c.unescapeICalValue(value)
+	case "LOCATION":
+		event.Location = c.unescapeICalValue(value)
+	case "DTSTART":
+		if t, err := c.parseICalDateTime(value); err == nil {
+			event.StartTime = t
+		} else if c.isDebugMode() {
+			log.Printf("Calendar Debug: Failed to parse DTSTART '%s': %v", value, err)
+		}
+	case "DTEND":
+		if t, err := c.parseICalDateTime(value); err == nil {
+			event.EndTime = t
+		} else if c.isDebugMode() {
+			log.Printf("Calendar Debug: Failed to parse DTEND '%s': %v", value, err)
+		}
+	case "STATUS":
+		event.Status = value
+	case "ORGANIZER":
+		// Extract email from ORGANIZER field (format: "ORGANIZER:mailto:email@example.com")
+		if strings.HasPrefix(value, "mailto:") {
+			event.Organizer = strings.TrimPrefix(value, "mailto:")
+		} else {
+			event.Organizer = value
+		}
+	case "URL":
+		event.URL = value
+	}
 }
 
-// getCalendarIDs returns the list of calendar IDs to fetch from
-func (c *CalendarConnector) getCalendarIDs() []string {
-	calendarIDsStr := c.GetConfigString("calendar_ids")
-	if calendarIDsStr == "" {
-		return []string{"primary"}
+// parseICalDateTime parses iCal date/time formats
+func (c *CalendarConnector) parseICalDateTime(value string) (time.Time, error) {
+	// Handle different iCal date/time formats
+	formats := []string{
+		"20060102T150405Z", // UTC format
+		"20060102T150405",  // Local format
+		"20060102",         // Date only
 	}
 
-	ids := strings.Split(calendarIDsStr, ",")
-	for i, id := range ids {
-		ids[i] = strings.TrimSpace(id)
+	for _, format := range formats {
+		if t, err := time.Parse(format, value); err == nil {
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Successfully parsed date/time '%s' using format '%s' -> %s",
+					value, format, t.Format("2006-01-02 15:04:05"))
+			}
+			return t, nil
+		}
 	}
 
-	return ids
+	if c.isDebugMode() {
+		log.Printf("Calendar Debug: Failed to parse date/time with all formats: %s", value)
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date/time: %s", value)
+}
+
+// unescapeICalValue unescapes iCal text values
+func (c *CalendarConnector) unescapeICalValue(value string) string {
+	// Unescape common iCal escape sequences
+	value = strings.ReplaceAll(value, "\\n", "\n")
+	value = strings.ReplaceAll(value, "\\,", ",")
+	value = strings.ReplaceAll(value, "\\;", ";")
+	value = strings.ReplaceAll(value, "\\\\", "\\")
+	return value
 }
