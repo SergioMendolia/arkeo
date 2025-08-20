@@ -1,14 +1,15 @@
 # GitLab Connector
 
-The GitLab connector fetches user activities from GitLab using Atom feeds. This allows you to track your GitLab activities including commits, merge requests, issues, comments, and other contributions in your daily timeline.
+The GitLab connector fetches user activities from GitLab using the Events API. This allows you to track your GitLab activities including commits, merge requests, issues, comments, and other contributions in your daily timeline.
 
 ## Features
 
 - Fetches user activities from GitLab.com or self-hosted GitLab instances
-- Supports various activity types: commits, merge requests, issues, comments, wiki updates, and more
-- Uses GitLab's built-in Atom feed with user feed tokens for authentication
+- Supports various activity types: commits (all branches), merge requests, issues, comments, project creation, and more
+- Uses GitLab's Events API with personal access tokens for authentication
 - Filters activities by date to show only relevant daily activities
 - Extracts project names and activity metadata for better organization
+- Handles pagination to capture all activities for the target date
 
 ## Configuration
 
@@ -18,13 +19,17 @@ The GitLab connector fetches user activities from GitLab using Atom feeds. This 
 autotime connectors enable gitlab
 ```
 
-### 2. Get Your GitLab Feed Token
+### 2. Get Your GitLab Personal Access Token
 
-1. Go to your GitLab profile (click your avatar → profile)
-2. Click **Edit Profile**
-3. In the left sidebar, click **Access tokens**
-4. Scroll down to the **Feed token** section
-5. Copy your feed token (it should look like `glft-...`)
+1. Go to your GitLab profile (click your avatar → **Edit Profile**)
+2. In the left sidebar, click **Access tokens**
+3. Click **Add new token**
+4. Fill in the token details:
+   - **Token name**: `autotime` (or any descriptive name)
+   - **Scopes**: Select `read_api` (this gives read access to the API)
+   - **Expiration date**: Set an appropriate expiration date
+5. Click **Create personal access token**
+6. Copy the token (it should look like `glpat-...`) - you won't be able to see it again
 
 ### 3. Configure the Connector
 
@@ -47,13 +52,13 @@ connectors:
       # Your GitLab username (required)
       username: "your-username"
       
-      # Your GitLab feed token (required)
-      feed_token: "glft-your-feed-token-here"
+      # Your GitLab personal access token (required)
+      access_token: "glpat-your-access-token-here"
     
     refresh_interval: "15m"
 ```
 
-**Note**: The connector uses the URL format `https://gitlab.com/username.atom?feed_token=TOKEN` to access your activity feed.
+**Note**: The connector uses the GitLab Events API endpoint `https://gitlab.com/api/v4/events` to access your activity events.
 
 ### Configuration Options
 
@@ -61,7 +66,7 @@ connectors:
 |--------|------|----------|---------|-------------|
 | `gitlab_url` | string | No | `https://gitlab.com` | GitLab instance URL |
 | `username` | string | Yes | - | Your GitLab username |
-| `feed_token` | string | Yes | - | Your GitLab feed token |
+| `access_token` | string | Yes | - | Your GitLab personal access token |
 
 ## Usage
 
@@ -99,13 +104,11 @@ The GitLab connector recognizes and categorizes these activities:
 
 | Activity Type | Description | Timeline Type |
 |---------------|-------------|---------------|
-| **Commits** | Git commits pushed to repositories | `git_commit` |
-| **Merge Requests** | Created, merged, or closed MRs | `jira` |
-| **Issues** | Created or closed issues | `jira` |
+| **Push Events** | Git commits pushed to any branch | `git_commit` |
+| **Merge Requests** | Opened, merged, or closed MRs | `jira` |
+| **Issues** | Opened or closed issues | `jira` |
 | **Comments** | Comments on issues, MRs, commits | `custom` |
 | **Projects** | Created new projects | `custom` |
-| **Wiki** | Created or updated wiki pages | `custom` |
-| **Milestones** | Created or closed milestones | `custom` |
 | **General Activities** | Other GitLab activities | `custom` |
 
 ## For Self-Hosted GitLab
@@ -118,9 +121,9 @@ If you're using a self-hosted GitLab instance:
 gitlab_url: "https://gitlab.example.com"
 ```
 
-2. Make sure your GitLab instance allows external access to user feeds
-3. Your feed token works the same way as GitLab.com
-4. The feed URL will be: `https://gitlab.example.com/username.atom?feed_token=TOKEN`
+2. Make sure your GitLab instance allows API access
+3. Your personal access token works the same way as GitLab.com
+4. The Events API endpoint will be: `https://gitlab.example.com/api/v4/events`
 
 ## Debug Mode
 
@@ -137,12 +140,12 @@ export LOG_LEVEL=debug
 ```
 
 Debug mode will show:
-- The exact URL being accessed
+- The exact API URLs being accessed
 - HTTP response status and headers
-- Raw feed content (first 500 characters)
-- Number of entries found in the feed
+- Number of events found on each page
 - Date parsing and filtering details
 - Activity conversion process
+- Pagination details
 
 **Security Note**: Debug logs may contain sensitive information. Disable debug mode in production and don't share debug logs publicly.
 
@@ -150,37 +153,36 @@ Debug mode will show:
 
 ### Connection Test Fails
 
-**Error**: `no feed token configured`
-- **Solution**: Make sure you've set the `feed_token` in your configuration
+**Error**: `no access token configured`
+- **Solution**: Make sure you've set the `access_token` in your configuration
 
-**Error**: `no username configured`  
+**Error**: `gitlab username is required`  
 - **Solution**: Make sure you've set the `username` in your configuration
 
-**Error**: `GitLab feed returned status 401`
-- **Solution**: Your feed token may be invalid or expired. Generate a new one from your GitLab profile
+**Error**: `GitLab API returned status 401`
+- **Solution**: Your access token may be invalid or expired. Generate a new one from your GitLab profile
+- **Check scope**: Ensure your token has the `read_api` scope
 
-**Error**: `GitLab feed returned status 404`
-- **Solution**: Check that your username is correct and the GitLab URL is valid. The feed should be accessible at `https://gitlab.com/your-username.atom`
-- **Test manually**: Try accessing `https://gitlab.com/your-username.atom?feed_token=your-token` in your browser
-- **Common causes**: 
-  - Username doesn't exist or is incorrect
-  - User profile is set to private
-  - GitLab instance URL is wrong
-  - Feed token is malformed
+**Error**: `GitLab API returned status 403`
+- **Solution**: Your token doesn't have sufficient permissions. Make sure it has the `read_api` scope
+
+**Error**: `GitLab API returned status 404`
+- **Solution**: Check that the GitLab URL is correct and accessible
 
 ### No Activities Found
 
 If the connector isn't finding activities:
 
-1. **Check the date range**: GitLab feeds typically show recent activities (last few weeks)
+1. **Check the date range**: The Events API shows recent activities (typically last few weeks)
 2. **Verify your username**: Make sure it matches your GitLab username exactly
-3. **Check feed token**: Ensure your feed token is current and hasn't been reset
-4. **Activity privacy**: Some activities might be private and not included in the feed
-5. **Manual verification**: Test the feed URL directly in your browser:
+3. **Check access token**: Ensure your token is current and has the right scope
+4. **Activity privacy**: Some activities might be private and not included in your events
+5. **Manual verification**: Test the API directly using curl:
+   ```bash
+   curl -H "Authorization: Bearer your-token" \
+        "https://gitlab.com/api/v4/events?per_page=10"
    ```
-   https://gitlab.com/your-username.atom?feed_token=your-token
-   ```
-   You should see XML content with your recent activities
+   You should see JSON data with your recent activities
 
 ### Debug Mode Troubleshooting
 
@@ -198,49 +200,46 @@ If the connector isn't finding activities:
    ```
 3. **Check debug output** for:
    - HTTP status codes (should be 200)
-   - Response body length (should be > 0)
-   - Number of feed entries found
+   - Number of events found per page
    - Date parsing issues
    - Activities filtered by date
+   - Pagination behavior
 
 ### Common Debug Scenarios
 
-**Feed loads but zero activities:**
-- Check if entries exist: Look for "parsed feed with X entries"
-- Check date filtering: Verify target date matches entry dates
-- Check date formats: Look for "Failed to parse date" messages
-- Check for empty dates: Some entries may have empty `published` dates but valid `updated` dates
+**API loads but zero activities:**
+- Check if events exist: Look for "found X events" messages
+- Check date filtering: Verify target date matches event dates
+- Check for date parsing errors: Look for "Failed to parse event time" messages
 
-**Feed returns 404:**
-- Verify the URL format in debug output
-- Test the exact URL shown in logs in your browser
-
-**Feed returns 401:**
-- Check if feed token is correctly included in URL
+**API returns 401:**
+- Check if access token is correctly configured
 - Verify token hasn't expired
+- Ensure token has `read_api` scope
 
-**XML parsing errors:**
-- Debug mode saves failed responses to temp files
-- Check if GitLab returned HTML login page instead of XML
+**API returns 403:**
+- Token exists but lacks proper permissions
+- Generate a new token with `read_api` scope
 
 **Date parsing issues:**
-- The connector handles entries with empty `published` dates by falling back to `updated` dates
-- Debug output shows which date source is used: "Using published date" vs "Using updated date"
-- Entries with both empty `published` and `updated` dates are skipped
+- The connector handles events with invalid date formats gracefully
+- Debug output shows which events are skipped due to date parsing errors
 
-### Feed Token Security
+### Access Token Security
 
-**Important**: Your feed token can access your GitLab activity feed, which may include information about private projects and activities. Keep it secure:
+**Important**: Your personal access token can access your GitLab data according to its scopes. Keep it secure:
 
-- Don't share your feed token
+- Don't share your access token
 - Don't commit it to version control
-- Reset it if you suspect it's been compromised
 - Use file permissions to protect your config file
+- Revoke and regenerate if compromised
+- Set appropriate expiration dates
 
-To reset your feed token:
+To revoke/regenerate your access token:
 1. Go to GitLab Profile → Edit Profile → Access tokens
-2. In the Feed token section, click **reset this token**
-3. Update your AutoTime configuration with the new token
+2. Find your token and click **Revoke**
+3. Create a new token with the same scopes
+4. Update your AutoTime configuration with the new token
 
 ## Examples
 
@@ -252,7 +251,7 @@ connectors:
     enabled: true
     config:
       username: "johndoe"
-      feed_token: "glft-abc123def456..."
+      access_token: "glpat-abc123def456..."
 ```
 
 ### Self-Hosted GitLab
@@ -264,7 +263,7 @@ connectors:
     config:
       gitlab_url: "https://git.company.com"
       username: "johndoe"
-      feed_token: "glft-abc123def456..."
+      access_token: "glpat-abc123def456..."
 ```
 
 ### Debug Mode Example
@@ -286,26 +285,43 @@ export LOG_LEVEL=debug
 📅 January 15, 2024
 
 🕘 09:30  [git_commit] Fix authentication bug in user service (gitlab)
-          → myproject/backend
+          → myproject/backend • main
 
-🕙 10:45  [jira] Opened merge request #42: Add new API endpoints (gitlab)
-          → myproject/api
+🕙 10:45  [jira] Opened merge request: Add new API endpoints (gitlab)
+          → myproject/api • !42
 
-🕐 13:20  [custom] Commented on issue #15: Database migration issues (gitlab)
-          → myproject/infrastructure
+🕐 13:20  [custom] Commented on issue: Database migration issues (gitlab)
+          → myproject/infrastructure • #15
 
-🕒 15:15  [jira] Merged merge request #41: Update dependencies (gitlab)
-          → myproject/frontend
+🕒 15:15  [jira] Merged merge request: Update dependencies (gitlab)
+          → myproject/frontend • !41
+
+🕘 16:00  [git_commit] Pushed 3 commits to feature-branch (gitlab)
+          → myproject/backend • feature-branch
 ```
+
+## API Rate Limits
+
+GitLab has API rate limits that may affect the connector:
+
+- **GitLab.com**: 2,000 requests per minute per user
+- **Self-hosted**: Varies by instance configuration
+
+The connector is designed to be efficient:
+- Uses pagination to minimize requests
+- Stops fetching when it reaches events older than the target date
+- Implements a maximum page limit to prevent infinite loops
+
+If you encounter rate limit errors, the connector will show appropriate error messages in debug mode.
 
 ## Limitations
 
-- Activities are limited to what GitLab includes in user activity feeds
-- Feed data is typically limited to recent activities (a few weeks)
+- Activities are limited to what GitLab includes in the Events API
+- Event data is typically limited to recent activities (a few weeks)
 - Some private activities may not be included depending on GitLab settings
-- Real-time updates depend on GitLab's feed refresh intervals
-- XML parsing relies on GitLab's Atom feed format stability
-- Some GitLab feed entries may have empty published dates (handled automatically by using updated dates)
+- Real-time updates depend on GitLab's event processing
+- The connector fetches up to 10 pages of events to prevent excessive API usage
+- Events are processed in reverse chronological order (newest first)
 
 ## Support
 
@@ -313,5 +329,6 @@ If you encounter issues with the GitLab connector:
 
 1. Test your connection: `autotime connectors test gitlab`
 2. Check your configuration: `autotime config show`
-3. Verify your GitLab feed token is valid
+3. Verify your GitLab personal access token is valid and has `read_api` scope
 4. Check that your GitLab instance is accessible
+5. Enable debug mode for detailed troubleshooting information

@@ -2,13 +2,13 @@ package connectors
 
 import (
 	"context"
-	"encoding/xml"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,46 +21,59 @@ type GitLabConnector struct {
 	httpClient *http.Client
 }
 
-// AtomFeed represents the root element of an Atom feed
-type AtomFeed struct {
-	XMLName xml.Name    `xml:"feed"`
-	Entries []AtomEntry `xml:"entry"`
+// GitLabEvent represents an event from the GitLab events API
+type GitLabEvent struct {
+	ID          int                 `json:"id"`
+	Title       *string             `json:"title"`
+	ProjectID   int                 `json:"project_id"`
+	ActionName  string              `json:"action_name"`
+	TargetID    *int                `json:"target_id"`
+	TargetIID   *int                `json:"target_iid"`
+	TargetType  *string             `json:"target_type"`
+	AuthorID    int                 `json:"author_id"`
+	TargetTitle *string             `json:"target_title"`
+	CreatedAt   string              `json:"created_at"`
+	Author      GitLabEventAuthor   `json:"author"`
+	PushData    *GitLabPushData     `json:"push_data,omitempty"`
+	Project     *GitLabEventProject `json:"project,omitempty"`
+	Note        *GitLabEventNote    `json:"note,omitempty"`
 }
 
-// AtomEntry represents an individual entry in an Atom feed
-type AtomEntry struct {
-	ID        string       `xml:"id"`
-	Title     string       `xml:"title"`
-	Published string       `xml:"published"`
-	Updated   string       `xml:"updated"`
-	Content   AtomContent  `xml:"content"`
-	Link      AtomLink     `xml:"link"`
-	Author    AtomAuthor   `xml:"author"`
-	Category  AtomCategory `xml:"category"`
-	Summary   string       `xml:"summary"`
+// GitLabEventAuthor represents the author of an event
+type GitLabEventAuthor struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Name     string `json:"name"`
 }
 
-// AtomContent represents the content element of an Atom entry
-type AtomContent struct {
-	Type  string `xml:"type,attr"`
-	Value string `xml:",chardata"`
+// GitLabPushData represents push data in an event
+type GitLabPushData struct {
+	CommitCount int    `json:"commit_count"`
+	Action      string `json:"action"`
+	RefType     string `json:"ref_type"`
+	CommitFrom  string `json:"commit_from"`
+	CommitTo    string `json:"commit_to"`
+	Ref         string `json:"ref"`
+	CommitTitle string `json:"commit_title"`
 }
 
-// AtomLink represents a link element in an Atom entry
-type AtomLink struct {
-	Href string `xml:"href,attr"`
-	Rel  string `xml:"rel,attr"`
-	Type string `xml:"type,attr"`
+// GitLabEventProject represents project info in an event
+type GitLabEventProject struct {
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	Path              string `json:"path"`
+	PathWithNamespace string `json:"path_with_namespace"`
+	WebURL            string `json:"web_url"`
 }
 
-// AtomAuthor represents the author element of an Atom entry
-type AtomAuthor struct {
-	Name string `xml:"name"`
-}
-
-// AtomCategory represents a category element in an Atom entry
-type AtomCategory struct {
-	Term string `xml:"term,attr"`
+// GitLabEventNote represents note/comment data in an event
+type GitLabEventNote struct {
+	ID         int    `json:"id"`
+	Body       string `json:"body"`
+	AuthorID   int    `json:"author_id"`
+	CreatedAt  string `json:"created_at"`
+	System     bool   `json:"system"`
+	NoteableID int    `json:"noteable_id"`
 }
 
 // NewGitLabConnector creates a new GitLab connector
@@ -68,12 +81,26 @@ func NewGitLabConnector() *GitLabConnector {
 	return &GitLabConnector{
 		BaseConnector: NewBaseConnector(
 			"gitlab",
-			"Fetches user activities from GitLab using Atom feeds",
+			"Fetches user activities from GitLab Events API (all branches, merge requests, issues)",
 		),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// stripHTMLTags removes HTML tags from a string
+func (g *GitLabConnector) stripHTMLTags(input string) string {
+	// Regular expression to match HTML tags
+	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
+	// Replace HTML tags with a space to prevent words from being concatenated
+	cleaned := htmlTagRegex.ReplaceAllString(input, " ")
+	// Clean up extra whitespace
+	cleaned = strings.TrimSpace(cleaned)
+	// Replace multiple spaces with single space
+	spaceRegex := regexp.MustCompile(`\s+`)
+	cleaned = spaceRegex.ReplaceAllString(cleaned, " ")
+	return cleaned
 }
 
 // isDebugMode checks if debug logging is enabled
@@ -102,12 +129,21 @@ func (g *GitLabConnector) GetRequiredConfig() []ConfigField {
 			Description: "GitLab username",
 		},
 		{
-			Key:         "feed_token",
+			Key:         "access_token",
 			Type:        "secret",
 			Required:    true,
-			Description: "GitLab user feed token (found in Profile > Edit Profile > Access tokens)",
+			Description: "GitLab personal access token (create at Profile > Access Tokens with 'read_api' scope)",
 		},
 	}
+}
+
+// Configure sets the connector configuration with GitLab-specific validation
+func (g *GitLabConnector) Configure(config map[string]interface{}) error {
+	if err := g.ValidateConfig(config); err != nil {
+		return err
+	}
+	g.BaseConnector.config = config
+	return nil
 }
 
 // ValidateConfig validates the GitLab configuration
@@ -117,9 +153,9 @@ func (g *GitLabConnector) ValidateConfig(config map[string]interface{}) error {
 		return fmt.Errorf("gitlab username is required")
 	}
 
-	feedToken, ok := config["feed_token"].(string)
-	if !ok || feedToken == "" {
-		return fmt.Errorf("gitlab feed token is required")
+	accessToken, ok := config["access_token"].(string)
+	if !ok || accessToken == "" {
+		return fmt.Errorf("gitlab access token is required")
 	}
 
 	// Validate GitLab URL if provided
@@ -139,86 +175,72 @@ func (g *GitLabConnector) TestConnection(ctx context.Context) error {
 		gitlabURL = "https://gitlab.com"
 	}
 
-	username := g.GetConfigString("username")
-	feedToken := g.GetConfigString("feed_token")
-
-	if username == "" {
-		return fmt.Errorf("no username configured")
-	}
-	if feedToken == "" {
-		return fmt.Errorf("no feed token configured")
+	accessToken := g.GetConfigString("access_token")
+	if accessToken == "" {
+		return fmt.Errorf("no access token configured")
 	}
 
-	// Construct feed URL
-	feedURL := fmt.Sprintf("%s/%s.atom?feed_token=%s", gitlabURL, username, feedToken)
+	// Test API connection by fetching user events
+	apiURL := fmt.Sprintf("%s/api/v4/events?per_page=1", strings.TrimSuffix(gitlabURL, "/"))
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Testing connection to %s/%s.atom", gitlabURL, username)
+		log.Printf("GitLab Debug: Testing connection to %s", apiURL)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Accept", "application/atom+xml, application/xml, text/xml")
-	req.Header.Set("User-Agent", "AutoTime/1.0")
+	// Add authorization header
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
 
+	// Send request
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to fetch GitLab feed: %w", err)
+		return fmt.Errorf("failed to fetch GitLab events: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if g.isDebugMode() {
 		log.Printf("GitLab Debug: Response status: %d %s", resp.StatusCode, resp.Status)
-		log.Printf("GitLab Debug: Response headers: %v", resp.Header)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication failed - please check your access token")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Read response body for better error reporting
 		body, _ := io.ReadAll(resp.Body)
 		if g.isDebugMode() {
 			log.Printf("GitLab Debug: Error response body: %s", string(body))
 		}
-		return fmt.Errorf("GitLab feed returned status %d: %s", resp.StatusCode, resp.Status)
+		return fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Read and parse the response
+	// Read and validate response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Response body length: %d bytes", len(body))
-		if len(body) > 0 {
-			// Show first 500 characters of response
-			preview := string(body)
-			if len(preview) > 500 {
-				preview = preview[:500] + "..."
-			}
-			log.Printf("GitLab Debug: Response preview: %s", preview)
-		}
-	}
-
-	// Try to parse XML
-	var feed AtomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
-		if g.isDebugMode() {
-			log.Printf("GitLab Debug: XML parsing failed: %v", err)
-		}
-		return fmt.Errorf("failed to parse GitLab feed: %w", err)
+	// Try to parse as JSON to validate API response
+	var events []GitLabEvent
+	if err := json.Unmarshal(body, &events); err != nil {
+		return fmt.Errorf("failed to parse GitLab API response: %w", err)
 	}
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Successfully parsed feed with %d entries", len(feed.Entries))
+		log.Printf("GitLab Debug: Successfully connected, found %d recent events", len(events))
 	}
 
 	return nil
 }
 
 // GetActivities retrieves GitLab activities for the specified date
+// GetActivities gets activities from GitLab for the given date
 func (g *GitLabConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
 	gitlabURL := g.GetConfigString("gitlab_url")
 	if gitlabURL == "" {
@@ -226,327 +248,569 @@ func (g *GitLabConnector) GetActivities(ctx context.Context, date time.Time) ([]
 	}
 
 	username := g.GetConfigString("username")
-	feedToken := g.GetConfigString("feed_token")
-
-	// Construct feed URL
-	feedURL := fmt.Sprintf("%s/%s.atom?feed_token=%s", gitlabURL, username, feedToken)
+	accessToken := g.GetConfigString("access_token")
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Fetching activities from %s/%s.atom for date %s", gitlabURL, username, date.Format("2006-01-02"))
+		log.Printf("GitLab Debug: Fetching events for user %s on date %s", username, date.Format("2006-01-02"))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	// Get events from GitLab API
+	events, err := g.getEvents(ctx, gitlabURL, accessToken, date)
 	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/atom+xml, application/xml, text/xml")
-	req.Header.Set("User-Agent", "AutoTime/1.0")
-
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch GitLab feed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Response status: %d %s", resp.StatusCode, resp.Status)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		if g.isDebugMode() {
-			log.Printf("GitLab Debug: Error response body: %s", string(body))
-		}
-		return nil, fmt.Errorf("GitLab feed returned status %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	// Read and parse the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Response body length: %d bytes", len(body))
+		log.Printf("GitLab Debug: Found %d events for date %s", len(events), date.Format("2006-01-02"))
 	}
 
-	// Parse the Atom feed
-	var feed AtomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
-		if g.isDebugMode() {
-			log.Printf("GitLab Debug: XML parsing failed: %v", err)
-			// Save raw response to file for inspection
-			if file, ferr := os.CreateTemp("", "gitlab-response-*.xml"); ferr == nil {
-				file.Write(body)
-				file.Close()
-				log.Printf("GitLab Debug: Raw response saved to %s", file.Name())
-			}
-		}
-		return nil, fmt.Errorf("failed to parse GitLab feed: %w", err)
-	}
+	var allActivities []timeline.Activity
 
-	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Successfully parsed feed with %d total entries", len(feed.Entries))
-		for i, entry := range feed.Entries {
-			log.Printf("GitLab Debug: Entry %d - Title: %s, Published: '%s', Updated: '%s'", i+1, entry.Title, entry.Published, entry.Updated)
+	// Convert events to activities
+	for _, event := range events {
+		activity := g.convertEventToActivity(event)
+		if activity != nil {
+			allActivities = append(allActivities, *activity)
 		}
 	}
 
-	activities, err := g.convertEntriesToActivities(feed.Entries, date)
-	if err != nil {
-		return nil, err
-	}
-
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Converted %d entries to %d activities for date %s", len(feed.Entries), len(activities), date.Format("2006-01-02"))
+		log.Printf("GitLab Debug: Total activities found: %d", len(allActivities))
 	}
 
-	return activities, nil
+	return allActivities, nil
 }
 
-// convertEntriesToActivities converts Atom entries to timeline activities
-func (g *GitLabConnector) convertEntriesToActivities(entries []AtomEntry, targetDate time.Time) ([]timeline.Activity, error) {
-	var activities []timeline.Activity
+// getEvents fetches user events from GitLab for the specified date with pagination
+func (g *GitLabConnector) getEvents(ctx context.Context, gitlabURL, accessToken string, date time.Time) ([]GitLabEvent, error) {
+	var allDayEvents []GitLabEvent
+	page := 1
+	perPage := 100
+	maxPages := 10 // Prevent infinite loops
+	targetDate := date.Truncate(24 * time.Hour)
+	nextDay := targetDate.Add(24 * time.Hour)
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Converting %d entries to activities for target date %s", len(entries), targetDate.Format("2006-01-02"))
+		log.Printf("GitLab Debug: Fetching events for date %s", date.Format("2006-01-02"))
 	}
 
-	for i, entry := range entries {
-		var publishedTime time.Time
-		var err error
+	for page <= maxPages {
+		apiURL := fmt.Sprintf("%s/api/v4/events?per_page=%d&page=%d",
+			strings.TrimSuffix(gitlabURL, "/"), perPage, page)
 
-		// Try to parse the published date first
-		if entry.Published != "" {
-			publishedTime, err = time.Parse(time.RFC3339, entry.Published)
-			if err != nil {
-				// Try alternative formats if RFC3339 fails
-				publishedTime, err = time.Parse("2006-01-02T15:04:05Z", entry.Published)
-			}
+		if g.isDebugMode() {
+			log.Printf("GitLab Debug: Fetching page %d from %s", page, apiURL)
 		}
 
-		// If published date is empty or failed to parse, try updated date
-		if err != nil || entry.Published == "" {
-			if entry.Updated != "" {
-				publishedTime, err = time.Parse(time.RFC3339, entry.Updated)
-				if err != nil {
-					publishedTime, err = time.Parse("2006-01-02T15:04:05Z", entry.Updated)
-				}
-				if g.isDebugMode() && entry.Published == "" {
-					log.Printf("GitLab Debug: Entry %d - Using updated date as fallback: %s", i+1, entry.Updated)
-				}
-			}
-		}
-
-		// If both dates failed to parse, skip this entry
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 		if err != nil {
+			return nil, fmt.Errorf("failed to create request for page %d: %w", page, err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := g.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch events page %d: %w", page, err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitLab API returned status %d for page %d: %s", resp.StatusCode, page, string(body))
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response for page %d: %w", page, err)
+		}
+
+		var pageEvents []GitLabEvent
+		if err := json.Unmarshal(body, &pageEvents); err != nil {
+			return nil, fmt.Errorf("failed to parse events response for page %d: %w", page, err)
+		}
+
+		if len(pageEvents) == 0 {
 			if g.isDebugMode() {
-				log.Printf("GitLab Debug: Entry %d - Failed to parse both published '%s' and updated '%s' dates: %v",
-					i+1, entry.Published, entry.Updated, err)
+				log.Printf("GitLab Debug: No more events found on page %d", page)
 			}
-			continue // Skip entries with unparseable dates
+			break
+		}
+
+		// Filter and check events by date
+		tooOldEvents := false
+
+		for _, event := range pageEvents {
+			eventTime, err := time.Parse(time.RFC3339, event.CreatedAt)
+			if err != nil {
+				if g.isDebugMode() {
+					log.Printf("GitLab Debug: Failed to parse event time %s: %v", event.CreatedAt, err)
+				}
+				continue
+			}
+
+			// If event is from target date, include it
+			if eventTime.After(targetDate) && eventTime.Before(nextDay) {
+				allDayEvents = append(allDayEvents, event)
+			} else if eventTime.Before(targetDate) {
+				// Events are typically in reverse chronological order
+				// If we find events older than our target date, we can stop
+				tooOldEvents = true
+				break
+			}
 		}
 
 		if g.isDebugMode() {
-			dateSource := "published"
-			if entry.Published == "" || (err != nil && entry.Updated != "") {
-				dateSource = "updated"
-			}
-			log.Printf("GitLab Debug: Entry %d - Using %s date: %s, Target date: %s, Same day: %v (published: '%s', updated: '%s')",
-				i+1, dateSource, publishedTime.Format("2006-01-02"), targetDate.Format("2006-01-02"),
-				isSameDay(publishedTime, targetDate), entry.Published, entry.Updated)
+			log.Printf("GitLab Debug: Page %d: found %d events, %d from target date",
+				page, len(pageEvents), len(allDayEvents))
 		}
 
-		// Check if the activity is on the target date
-		if !isSameDay(publishedTime, targetDate) {
+		// Stop pagination if we've gone past our target date
+		if tooOldEvents {
 			if g.isDebugMode() {
-				log.Printf("GitLab Debug: Entry %d - Skipping due to date mismatch", i+1)
+				log.Printf("GitLab Debug: Found events older than target date, stopping pagination")
 			}
-			continue
+			break
 		}
 
-		// Determine activity type based on content
-		activityType := g.determineActivityType(entry)
-
-		// Extract project/repository name from the link or content
-		projectName := g.extractProjectName(entry)
-
-		// Create tags
-		tags := []string{"gitlab", activityType}
-		if projectName != "" {
-			tags = append(tags, projectName)
-		}
-		if entry.Category.Term != "" {
-			tags = append(tags, entry.Category.Term)
+		// If this page didn't have the full number of events, we've reached the end
+		if len(pageEvents) < perPage {
+			if g.isDebugMode() {
+				log.Printf("GitLab Debug: Reached last page (page %d had %d events)", page, len(pageEvents))
+			}
+			break
 		}
 
-		// Create activity
-		activity := timeline.Activity{
-			ID:          fmt.Sprintf("gitlab-%s", g.generateActivityID(entry)),
-			Type:        g.mapToTimelineActivityType(activityType),
-			Title:       entry.Title,
-			Description: g.extractDescription(entry),
-			Timestamp:   publishedTime,
-			Source:      "gitlab",
-			URL:         entry.Link.Href,
-			Tags:        tags,
-			Metadata: map[string]string{
-				"gitlab_id":     entry.ID,
-				"activity_type": activityType,
-				"project":       projectName,
-				"author":        entry.Author.Name,
-			},
-		}
-
-		if g.isDebugMode() {
-			log.Printf("GitLab Debug: Entry %d - Created activity: %s", i+1, activity.Title)
-		}
-
-		activities = append(activities, activity)
+		page++
 	}
 
 	if g.isDebugMode() {
-		log.Printf("GitLab Debug: Final result: %d activities created", len(activities))
+		log.Printf("GitLab Debug: Total events found for target date: %d", len(allDayEvents))
 	}
 
-	return activities, nil
+	return allDayEvents, nil
 }
 
-// determineActivityType determines the type of GitLab activity from the entry
-func (g *GitLabConnector) determineActivityType(entry AtomEntry) string {
-	title := strings.ToLower(entry.Title)
-	content := strings.ToLower(entry.Content.Value + entry.Summary)
+// convertEventToActivity converts a GitLab event to a timeline activity
+func (g *GitLabConnector) convertEventToActivity(event GitLabEvent) *timeline.Activity {
+	// Parse event date
+	eventTime, err := time.Parse(time.RFC3339, event.CreatedAt)
+	if err != nil {
+		if g.isDebugMode() {
+			log.Printf("GitLab Debug: Failed to parse event time %s: %v", event.CreatedAt, err)
+		}
+		eventTime = time.Now() // Fallback
+	}
 
-	// Check for different activity types based on title and content
-	switch {
-	case strings.Contains(title, "pushed to") || strings.Contains(content, "commit"):
-		return "commit"
-	case strings.Contains(title, "opened merge request") || strings.Contains(title, "created merge request"):
-		return "merge_request_opened"
-	case strings.Contains(title, "merged merge request") || strings.Contains(title, "accepted merge request"):
-		return "merge_request_merged"
-	case strings.Contains(title, "closed merge request"):
-		return "merge_request_closed"
-	case strings.Contains(title, "opened issue") || strings.Contains(title, "created issue"):
-		return "issue_opened"
-	case strings.Contains(title, "closed issue"):
-		return "issue_closed"
-	case strings.Contains(title, "commented on"):
-		return "comment"
-	case strings.Contains(title, "created project") || strings.Contains(title, "created repository"):
-		return "project_created"
-	case strings.Contains(title, "created wiki page") || strings.Contains(title, "updated wiki page"):
-		return "wiki"
-	case strings.Contains(title, "created milestone") || strings.Contains(title, "closed milestone"):
-		return "milestone"
-	default:
-		return "activity"
+	// Handle different event types
+	switch event.ActionName {
+	case "pushed to":
+		return g.convertPushEventToActivity(event, eventTime)
+	case "opened", "merged", "closed":
+		if event.TargetType != nil && *event.TargetType == "MergeRequest" {
+			return g.convertMergeRequestEventToActivity(event, eventTime)
+		} else if event.TargetType != nil && *event.TargetType == "Issue" {
+			return g.convertIssueEventToActivity(event, eventTime)
+		}
+	case "commented on":
+		return g.convertCommentEventToActivity(event, eventTime)
+	case "created":
+		if event.TargetType != nil && *event.TargetType == "Project" {
+			return g.convertProjectEventToActivity(event, eventTime)
+		} else if event.TargetType != nil && (*event.TargetType == "Issue" || *event.TargetType == "MergeRequest") {
+			return g.convertIssueEventToActivity(event, eventTime)
+		}
+	}
+
+	// For unhandled event types, create a generic activity
+	if g.isDebugMode() {
+		log.Printf("GitLab Debug: Unhandled event type: %s with target type: %v", event.ActionName, event.TargetType)
+	}
+
+	return g.convertGenericEventToActivity(event, eventTime)
+}
+
+// convertPushEventToActivity converts a GitLab push event to a timeline activity
+func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	if event.PushData == nil {
+		return nil
+	}
+
+	// Use commit title from push data or generate a default
+	title := strings.TrimSpace(event.PushData.CommitTitle)
+	if title == "" {
+		if event.PushData.CommitCount == 1 {
+			title = fmt.Sprintf("Pushed 1 commit to %s", event.PushData.Ref)
+		} else {
+			title = fmt.Sprintf("Pushed %d commits to %s", event.PushData.CommitCount, event.PushData.Ref)
+		}
+	}
+
+	// Create description
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("Pushed to %s branch in %s", event.PushData.Ref, event.Project.PathWithNamespace)
+	} else {
+		description = fmt.Sprintf("Pushed to %s branch", event.PushData.Ref)
+	}
+
+	if event.PushData.CommitCount > 1 {
+		description += fmt.Sprintf(" (%d commits)", event.PushData.CommitCount)
+	}
+
+	// Build tags
+	tags := []string{"gitlab", "push", event.PushData.Ref}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL - try to link to the commits
+	var activityURL string
+	if event.Project != nil && event.PushData.CommitTo != "" {
+		if event.PushData.CommitCount == 1 {
+			// Single commit - link to commit
+			activityURL = fmt.Sprintf("%s/-/commit/%s", event.Project.WebURL, event.PushData.CommitTo)
+		} else {
+			// Multiple commits - link to compare view
+			activityURL = fmt.Sprintf("%s/-/compare/%s...%s", event.Project.WebURL, event.PushData.CommitFrom, event.PushData.CommitTo)
+		}
+	} else if event.Project != nil {
+		// Fallback to project URL
+		activityURL = event.Project.WebURL
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-push-%d", event.ID),
+		Type:        timeline.ActivityTypeGitCommit,
+		Title:       g.stripHTMLTags(title),
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata: map[string]string{
+			"event_id":     fmt.Sprintf("%d", event.ID),
+			"action_name":  event.ActionName,
+			"commit_count": fmt.Sprintf("%d", event.PushData.CommitCount),
+			"ref":          event.PushData.Ref,
+			"ref_type":     event.PushData.RefType,
+			"commit_from":  event.PushData.CommitFrom,
+			"commit_to":    event.PushData.CommitTo,
+			"author":       event.Author.Username,
+		},
 	}
 }
 
-// mapToTimelineActivityType maps GitLab activity types to timeline activity types
-func (g *GitLabConnector) mapToTimelineActivityType(activityType string) timeline.ActivityType {
-	switch activityType {
-	case "commit":
-		return timeline.ActivityTypeGitCommit
-	case "merge_request_opened", "merge_request_merged", "merge_request_closed":
-		return timeline.ActivityTypeJira // Using as generic project activity type
-	case "issue_opened", "issue_closed":
-		return timeline.ActivityTypeJira
-	case "comment":
-		return timeline.ActivityTypeCustom
-	case "project_created":
-		return timeline.ActivityTypeCustom
-	case "wiki":
-		return timeline.ActivityTypeCustom
-	case "milestone":
-		return timeline.ActivityTypeCustom
-	default:
-		return timeline.ActivityTypeCustom
+// convertMergeRequestEventToActivity converts a GitLab merge request event to a timeline activity
+func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	title := event.ActionName + " merge request"
+	if event.TargetTitle != nil {
+		title = fmt.Sprintf("%s merge request: %s", strings.Title(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
+	}
+
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("%s merge request in %s", strings.Title(event.ActionName), event.Project.PathWithNamespace)
+	} else {
+		description = fmt.Sprintf("%s merge request", strings.Title(event.ActionName))
+	}
+
+	if event.TargetIID != nil {
+		description += fmt.Sprintf(" (!%d)", *event.TargetIID)
+	}
+
+	// Build tags
+	tags := []string{"gitlab", "merge-request", event.ActionName}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL
+	var activityURL string
+	if event.Project != nil && event.TargetIID != nil {
+		activityURL = fmt.Sprintf("%s/-/merge_requests/%d", event.Project.WebURL, *event.TargetIID)
+	} else if event.Project != nil {
+		activityURL = event.Project.WebURL
+	}
+
+	metadata := map[string]string{
+		"event_id":    fmt.Sprintf("%d", event.ID),
+		"action_name": event.ActionName,
+		"author":      event.Author.Username,
+	}
+	if event.TargetIID != nil {
+		metadata["merge_request_iid"] = fmt.Sprintf("%d", *event.TargetIID)
+	}
+	if event.TargetID != nil {
+		metadata["merge_request_id"] = fmt.Sprintf("%d", *event.TargetID)
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-mr-%d", event.ID),
+		Type:        timeline.ActivityTypeJira,
+		Title:       title,
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata:    metadata,
 	}
 }
 
-// extractProjectName extracts the project name from the entry
-func (g *GitLabConnector) extractProjectName(entry AtomEntry) string {
-	// Try to extract from the link URL
-	if entry.Link.Href != "" {
-		parts := strings.Split(entry.Link.Href, "/")
-		for i, part := range parts {
-			if part == "projects" && i+1 < len(parts) {
-				// Project name might be URL encoded
-				if projectName, err := url.QueryUnescape(parts[i+1]); err == nil {
-					return projectName
-				}
-				return parts[i+1]
-			}
-		}
+// convertIssueEventToActivity converts a GitLab issue event to a timeline activity
+func (g *GitLabConnector) convertIssueEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	action := event.ActionName
+	if action == "created" {
+		action = "opened"
 	}
 
-	// Try to extract from title (common format: "username action in project")
-	title := entry.Title
-	if strings.Contains(title, " in ") {
-		parts := strings.Split(title, " in ")
-		if len(parts) > 1 {
-			return strings.TrimSpace(parts[len(parts)-1])
-		}
+	title := action + " issue"
+	if event.TargetTitle != nil {
+		title = fmt.Sprintf("%s issue: %s", strings.Title(action), g.stripHTMLTags(*event.TargetTitle))
 	}
 
-	// Try to extract from content
-	content := entry.Content.Value
-	if strings.Contains(content, "project ") {
-		// This is a basic extraction - might need refinement based on actual feed content
-		words := strings.Fields(content)
-		for i, word := range words {
-			if word == "project" && i+1 < len(words) {
-				return words[i+1]
-			}
-		}
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("%s issue in %s", strings.Title(action), event.Project.PathWithNamespace)
+	} else {
+		description = fmt.Sprintf("%s issue", strings.Title(action))
 	}
 
-	return ""
+	if event.TargetIID != nil {
+		description += fmt.Sprintf(" (#%d)", *event.TargetIID)
+	}
+
+	// Build tags
+	tags := []string{"gitlab", "issue", action}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL
+	var activityURL string
+	if event.Project != nil && event.TargetIID != nil {
+		activityURL = fmt.Sprintf("%s/-/issues/%d", event.Project.WebURL, *event.TargetIID)
+	} else if event.Project != nil {
+		activityURL = event.Project.WebURL
+	}
+
+	metadata := map[string]string{
+		"event_id":    fmt.Sprintf("%d", event.ID),
+		"action_name": event.ActionName,
+		"author":      event.Author.Username,
+	}
+	if event.TargetIID != nil {
+		metadata["issue_iid"] = fmt.Sprintf("%d", *event.TargetIID)
+	}
+	if event.TargetID != nil {
+		metadata["issue_id"] = fmt.Sprintf("%d", *event.TargetID)
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-issue-%d", event.ID),
+		Type:        timeline.ActivityTypeJira,
+		Title:       title,
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata:    metadata,
+	}
 }
 
-// extractDescription creates a description from the entry content
-func (g *GitLabConnector) extractDescription(entry AtomEntry) string {
-	if entry.Summary != "" {
-		return entry.Summary
-	}
+// convertCommentEventToActivity converts a GitLab comment event to a timeline activity
+func (g *GitLabConnector) convertCommentEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	var title string
+	var targetType string
 
-	if entry.Content.Value != "" {
-		// Clean up HTML/markdown content for display
-		content := entry.Content.Value
-		content = strings.ReplaceAll(content, "\n", " ")
-		content = strings.TrimSpace(content)
-
-		// Truncate if too long
-		if len(content) > 200 {
-			content = content[:200] + "..."
+	if event.TargetType != nil {
+		switch *event.TargetType {
+		case "MergeRequest":
+			targetType = "merge request"
+		case "Issue":
+			targetType = "issue"
+		case "Commit":
+			targetType = "commit"
+		default:
+			targetType = strings.ToLower(*event.TargetType)
 		}
-
-		return content
+	} else {
+		targetType = "item"
 	}
 
-	return "GitLab activity"
+	if event.TargetTitle != nil {
+		title = fmt.Sprintf("Commented on %s: %s", targetType, g.stripHTMLTags(*event.TargetTitle))
+	} else {
+		title = fmt.Sprintf("Commented on %s", targetType)
+	}
+
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("Commented on %s in %s", targetType, event.Project.PathWithNamespace)
+	} else {
+		description = fmt.Sprintf("Commented on %s", targetType)
+	}
+
+	// Build tags
+	tags := []string{"gitlab", "comment", targetType}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL - this is more complex as we need to determine the right URL format
+	var activityURL string
+	if event.Project != nil && event.TargetIID != nil {
+		switch targetType {
+		case "merge request":
+			activityURL = fmt.Sprintf("%s/-/merge_requests/%d", event.Project.WebURL, *event.TargetIID)
+		case "issue":
+			activityURL = fmt.Sprintf("%s/-/issues/%d", event.Project.WebURL, *event.TargetIID)
+		default:
+			activityURL = event.Project.WebURL
+		}
+	} else if event.Project != nil {
+		activityURL = event.Project.WebURL
+	}
+
+	metadata := map[string]string{
+		"event_id":    fmt.Sprintf("%d", event.ID),
+		"action_name": event.ActionName,
+		"author":      event.Author.Username,
+		"target_type": targetType,
+	}
+	if event.TargetIID != nil {
+		metadata["target_iid"] = fmt.Sprintf("%d", *event.TargetIID)
+	}
+	if event.TargetID != nil {
+		metadata["target_id"] = fmt.Sprintf("%d", *event.TargetID)
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-comment-%d", event.ID),
+		Type:        timeline.ActivityTypeCustom,
+		Title:       title,
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata:    metadata,
+	}
 }
 
-// generateActivityID generates a unique activity ID from the entry
-func (g *GitLabConnector) generateActivityID(entry AtomEntry) string {
-	// Use GitLab's internal ID if available, otherwise generate from title + timestamp
-	if entry.ID != "" {
-		// Extract the numeric part from GitLab's ID format
-		parts := strings.Split(entry.ID, "/")
-		if len(parts) > 0 {
-			return parts[len(parts)-1]
-		}
+// convertProjectEventToActivity converts a GitLab project event to a timeline activity
+func (g *GitLabConnector) convertProjectEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	title := "Created project"
+	if event.TargetTitle != nil {
+		title = fmt.Sprintf("Created project: %s", g.stripHTMLTags(*event.TargetTitle))
+	} else if event.Project != nil {
+		title = fmt.Sprintf("Created project: %s", event.Project.Name)
 	}
 
-	// Fallback: generate from title and published time
-	if entry.Published != "" {
-		if publishedTime, err := time.Parse(time.RFC3339, entry.Published); err == nil {
-			return fmt.Sprintf("%d-%s", publishedTime.Unix(), strings.ReplaceAll(entry.Title, " ", "-"))
-		}
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("Created new project %s", event.Project.PathWithNamespace)
+	} else {
+		description = "Created new project"
 	}
 
-	return fmt.Sprintf("gitlab-%d", time.Now().Unix())
+	// Build tags
+	tags := []string{"gitlab", "project", "created"}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL
+	var activityURL string
+	if event.Project != nil {
+		activityURL = event.Project.WebURL
+	}
+
+	metadata := map[string]string{
+		"event_id":    fmt.Sprintf("%d", event.ID),
+		"action_name": event.ActionName,
+		"author":      event.Author.Username,
+	}
+	if event.ProjectID != 0 {
+		metadata["project_id"] = fmt.Sprintf("%d", event.ProjectID)
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-project-%d", event.ID),
+		Type:        timeline.ActivityTypeCustom,
+		Title:       title,
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata:    metadata,
+	}
+}
+
+// convertGenericEventToActivity converts any unhandled GitLab event to a generic timeline activity
+func (g *GitLabConnector) convertGenericEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
+	title := event.ActionName
+	if event.TargetTitle != nil {
+		title = fmt.Sprintf("%s: %s", strings.Title(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
+	} else {
+		title = strings.Title(event.ActionName)
+	}
+
+	var description string
+	if event.Project != nil {
+		description = fmt.Sprintf("%s in %s", strings.Title(event.ActionName), event.Project.PathWithNamespace)
+	} else {
+		description = strings.Title(event.ActionName)
+	}
+
+	if event.TargetType != nil {
+		description += fmt.Sprintf(" (%s)", strings.ToLower(*event.TargetType))
+	}
+
+	// Build tags
+	tags := []string{"gitlab", strings.ToLower(event.ActionName)}
+	if event.TargetType != nil {
+		tags = append(tags, strings.ToLower(*event.TargetType))
+	}
+	if event.Project != nil {
+		tags = append(tags, event.Project.Path)
+	}
+
+	// Generate URL
+	var activityURL string
+	if event.Project != nil {
+		activityURL = event.Project.WebURL
+	}
+
+	metadata := map[string]string{
+		"event_id":    fmt.Sprintf("%d", event.ID),
+		"action_name": event.ActionName,
+		"author":      event.Author.Username,
+	}
+	if event.TargetType != nil {
+		metadata["target_type"] = *event.TargetType
+	}
+	if event.TargetIID != nil {
+		metadata["target_iid"] = fmt.Sprintf("%d", *event.TargetIID)
+	}
+	if event.TargetID != nil {
+		metadata["target_id"] = fmt.Sprintf("%d", *event.TargetID)
+	}
+
+	return &timeline.Activity{
+		ID:          fmt.Sprintf("gitlab-generic-%d", event.ID),
+		Type:        timeline.ActivityTypeCustom,
+		Title:       title,
+		Description: description,
+		Timestamp:   eventTime,
+		Source:      "gitlab",
+		URL:         activityURL,
+		Tags:        tags,
+		Metadata:    metadata,
+	}
 }

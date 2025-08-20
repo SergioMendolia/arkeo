@@ -58,7 +58,7 @@ connectors:
 
     refresh_interval: "10m"
 
-  # GitLab connector - fetches user activities from Atom feeds
+  # GitLab connector - fetches push events from GitLab API (all branches)
   gitlab:
     enabled: false
     config:
@@ -68,8 +68,8 @@ connectors:
       # Your GitLab username
       username: "your-username"
 
-      # GitLab feed token from Profile > Edit Profile > Access tokens > Feed token
-      # This token is used to access your activity feed via RSS/Atom
-      feed_token: "your-gitlab-feed-token"
+      # GitLab personal access token from Profile > Access Tokens
+      # Requires 'read_api' scope to access user events data
+      access_token: "your-gitlab-access-token"
 
     refresh_interval: "15m"
