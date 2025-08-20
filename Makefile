@@ -96,12 +96,6 @@ run: build
 	@echo "🚀 Running $(BINARY_NAME)..."
 	./$(BINARY_NAME) timeline
 
-# Run the demo
-.PHONY: demo
-demo: build
-	@echo "🎭 Running demo..."
-	./demo.sh
-
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -169,7 +163,6 @@ release: check build-all
 
 	# Copy documentation
 	cp README.md $(DIST_DIR)/
-	cp INSTALL.md $(DIST_DIR)/
 	cp config.example.yaml $(DIST_DIR)/
 
 	@echo "🎉 Release package created in $(DIST_DIR)/"

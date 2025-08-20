@@ -13,8 +13,6 @@ type TimelineOptions struct {
 	ShowDetails    bool
 	ShowTimestamps bool
 	GroupByHour    bool
-	FilterType     string
-	FilterSource   string
 	MaxItems       int
 	Format         string // "table", "json", "csv"
 }
@@ -38,14 +36,6 @@ func DisplayTimeline(tl *timeline.Timeline, opts TimelineOptions) error {
 	}
 
 	activities := tl.Activities
-
-	// Apply filters
-	if opts.FilterType != "" {
-		activities = filterByType(activities, opts.FilterType)
-	}
-	if opts.FilterSource != "" {
-		activities = filterBySource(activities, opts.FilterSource)
-	}
 
 	// Limit number of items
 	if opts.MaxItems > 0 && len(activities) > opts.MaxItems {
@@ -138,8 +128,8 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 		fmt.Printf("%s   📝 %s\n", prefix, activity.Description)
 	}
 
-	// Show duration if available
-	if activity.Duration != nil {
+	// Show duration if available and details requested
+	if opts.ShowDetails && activity.Duration != nil {
 		fmt.Printf("%s   ⏱️  %s\n", prefix, activity.FormatDuration())
 	}
 
@@ -148,28 +138,6 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 		fmt.Printf("%s   🔗 %s\n", prefix, activity.URL)
 	}
 
-}
-
-// filterByType filters activities by type
-func filterByType(activities []timeline.Activity, filterType string) []timeline.Activity {
-	var filtered []timeline.Activity
-	for _, activity := range activities {
-		if string(activity.Type) == filterType {
-			filtered = append(filtered, activity)
-		}
-	}
-	return filtered
-}
-
-// filterBySource filters activities by source
-func filterBySource(activities []timeline.Activity, filterSource string) []timeline.Activity {
-	var filtered []timeline.Activity
-	for _, activity := range activities {
-		if activity.Source == filterSource {
-			filtered = append(filtered, activity)
-		}
-	}
-	return filtered
 }
 
 // displayJSON outputs timeline as JSON

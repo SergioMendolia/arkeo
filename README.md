@@ -111,12 +111,6 @@ autotime timeline --date 2023-12-25
 # Show detailed information
 autotime timeline --details
 
-# Filter by activity type
-autotime timeline --type git_commit
-
-# Filter by source
-autotime timeline --source github
-
 # Limit number of items
 autotime timeline --max 20
 
@@ -167,47 +161,7 @@ autotime config reset
 AutoTime stores configuration in `~/.config/autotime/config.yaml`. You can edit this file directly or use `autotime config edit` to open it in your default editor.
 
 ### Example Configuration
-
-```yaml
-app:
-  date_format: "2006-01-02"
-  log_level: "info"
-
-connectors:
-  github:
-    enabled: true
-    config:
-      token: "ghp_your_token_here"
-      username: "your-username"
-      include_private: false
-
-  gitlab:
-    enabled: true
-    config:
-      gitlab_url: "https://gitlab.com"
-      username: "your-username"
-      feed_token: "glft-your_feed_token_here"
-
-  calendar:
-    enabled: false
-    config:
-      provider: "google"
-      client_id: "your-client-id"
-      client_secret: "your-client-secret"
-      calendar_ids: "primary"
-
-
-ui:
-  default_view: "timeline"
-  show_timestamps: true
-  # group_by_interval: "1h"  # Not yet implemented
-  page_size: 50
-
-storage:
-  type: "file"
-  location: "data"
-  retention_days: 90
-```
+See [the example config](example_config.yaml)
 
 ## Output Formats
 
@@ -218,14 +172,12 @@ Found 15 activities
 
 📅 09:00 (4 activities)
 ──────────────────────────────────────────────────────
-  09:15 💻 [github] Fixed authentication bug
-  09:30 📁 [filesystem] Modified: config.go
-  09:45 📅 [calendar] Team standup meeting
+  09:15 [github] Fixed authentication bug
+  09:45 [calendar] Team standup meeting
 
 📅 10:00 (3 activities)
 ──────────────────────────────────────────────────────
-  10:00 💻 [github] Updated README documentation
-  10:30 📁 [filesystem] Modified: README.md
+  10:00 [github] Updated README documentation
 ```
 
 ### CSV Format
@@ -236,28 +188,7 @@ autotime timeline --format csv
 # 2023-12-25 09:20:00,git_commit,gitlab,MR !42: Add new feature implementation,,15m,https://gitlab.com/...
 ```
 
-### JSON Format
-```bash
-autotime timeline --format json
-# Outputs structured JSON data for programmatic use
-```
-
 ## Development
-
-### Project Structure
-
-```
-autotime/
-├── cmd/                    # CLI commands
-├── internal/
-│   ├── config/            # Configuration management
-│   ├── connectors/        # Service connectors
-│   ├── timeline/          # Timeline data structures
-│   ├── display/           # Output formatting
-│   └── editor/            # Editor integration
-├── examples/              # Example configurations
-└── docs/                  # Documentation
-```
 
 ### Adding Custom Connectors
 
@@ -326,11 +257,6 @@ make check
 make release
 ```
 
-## Environment Variables
-
-- `VISUAL` or `EDITOR`: Preferred text editor for configuration editing
-- `AUTOTIME_CONFIG`: Override default config file location
-
 ## Troubleshooting
 
 ### Common Issues
@@ -370,13 +296,6 @@ autotime connectors info <name>
 autotime config validate
 ```
 
-## Security Considerations
-
-- API tokens are stored in the configuration file with restricted permissions (600)
-- Sensitive data is marked as "secret" type in connector configurations
-- All network requests use HTTPS
-- Configuration validation prevents common misconfigurations
-
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -387,23 +306,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 git clone https://github.com/autotime/autotime.git
 cd autotime
 make setup    # Install development dependencies
-make check    # Run all checks
-make demo     # Test the application
 ```
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with [Cobra](https://github.com/spf13/cobra) for CLI interface
-- Uses [Viper](https://github.com/spf13/viper) for configuration management
-- Inspired by various time tracking and productivity tools
-
----
-
-**Made with ❤️ for developers who want to understand their daily workflow**
-
-For detailed installation instructions, see [INSTALL.md](INSTALL.md)
-For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md)

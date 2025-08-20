@@ -16,14 +16,12 @@ import (
 )
 
 var (
-	configPath   string
-	date         string
-	format       string
-	showDetail   bool
-	maxItems     int
-	filterType   string
-	filterSource string
-	groupByHour  bool
+	configPath  string
+	date        string
+	format      string
+	showDetail  bool
+	maxItems    int
+	groupByHour bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -134,8 +132,6 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 			ShowDetails:    showDetail,
 			ShowTimestamps: true,
 			GroupByHour:    groupByHour,
-			FilterType:     filterType,
-			FilterSource:   filterSource,
 			MaxItems:       maxItems,
 			Format:         format,
 		}
@@ -178,9 +174,7 @@ var versionCmd = &cobra.Command{
 func init() {
 	// Timeline flags
 	timelineCmd.Flags().BoolVar(&showDetail, "details", false, "show detailed information for each activity")
-	timelineCmd.Flags().IntVar(&maxItems, "max", 50, "maximum number of activities to show")
-	timelineCmd.Flags().StringVar(&filterType, "type", "", "filter by activity type")
-	timelineCmd.Flags().StringVar(&filterSource, "source", "", "filter by activity source")
+	timelineCmd.Flags().IntVar(&maxItems, "max", 500, "maximum number of activities to show")
 	timelineCmd.Flags().BoolVar(&groupByHour, "group", false, "group activities by hour")
 
 	// Connectors subcommands
