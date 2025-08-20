@@ -11,6 +11,7 @@ The Google Calendar connector integrates with Google Calendar to fetch your meet
 - Extracts meeting details including duration, location, and organizer
 - Categorizes events as virtual or in-person meetings
 - Option to include or exclude declined events
+- Automatic deduplication prevents the same event from appearing multiple times
 - Works with any Google Calendar that has sharing enabled
 
 ## How It Works
@@ -92,6 +93,8 @@ connectors:
       include_declined: false
 ```
 
+**Note**: When using multiple calendars, shared events (like meetings where you're invited to both personal and work calendars) are automatically deduplicated by their unique event ID, so they'll only appear once in your timeline.
+
 ### Configuration Options
 
 | Option | Type | Required | Default | Description |
@@ -129,6 +132,32 @@ Filter to show only calendar activities:
 
 ```bash
 autotime timeline --source calendar
+```
+
+## Event Deduplication
+
+The calendar connector automatically prevents duplicate events from appearing in your timeline. This is important when:
+
+- **Multiple calendars contain the same event** (e.g., shared meetings)
+- **Overlapping calendar URLs** point to calendars with common events
+- **Recurring events** appear multiple times in iCal feeds
+
+### How Deduplication Works
+
+1. **Event UID tracking**: Each calendar event has a unique identifier (UID) from the iCal data
+2. **Cross-calendar deduplication**: Events are deduplicated across all configured calendars
+3. **First occurrence wins**: If the same event appears in multiple calendars, only the first occurrence is kept
+4. **Debug visibility**: In debug mode, you can see which duplicate events are being skipped
+
+### Debug Output Example
+
+```
+Calendar Debug: Found 5 events from calendar 1
+Calendar Debug: Found 8 events from calendar 2
+Calendar Debug: Skipping duplicate event 'Team Meeting' with UID: abc123def456
+Calendar Debug: Skipped 2 duplicate events from calendar 2
+Calendar Debug: Total activities found: 11 (after deduplication)
+Calendar Debug: Unique events tracked: 11
 ```
 
 ## Activity Details
@@ -269,6 +298,16 @@ Calendar Debug: Events for target date: 0
 ```
 - **Solution**: No events exist on the requested date, try a different date or check your calendar
 
+**Duplicate Event Detection:**
+Debug shows events being deduplicated across calendars:
+```
+Calendar Debug: Found 3 events from calendar 1
+Calendar Debug: Found 5 events from calendar 2
+Calendar Debug: Skipping duplicate event 'Daily Standup' with UID: meeting123
+Calendar Debug: Skipped 2 duplicate events from calendar 2
+```
+- **This is normal**: Multiple calendars often contain the same shared events
+
 ## Examples
 
 ### Single Calendar
@@ -400,6 +439,8 @@ Calendar Debug: Skipping declined event: Optional Training Session
 Calendar Debug: Added event: Team Standup at 09:00 (duration: 30m0s)
 Calendar Debug: Declined events skipped: 1
 Calendar Debug: Final activities created: 4
+Calendar Debug: Skipping duplicate event 'Weekly Sync' with UID: xyz789abc123
+Calendar Debug: Skipped 1 duplicate events from calendar 2
 ```
 
 #### Error Details
@@ -483,6 +524,7 @@ For calendars shared with you:
 - **Real-time updates**: Changes to calendar events may take time to appear in iCal feeds
 - **Date filtering**: Only events for the specific requested date are included
 - **Time zone handling**: Events are displayed in your local time zone
+- **Deduplication scope**: Events are deduplicated by UID across all calendars, so shared events appear only once
 
 ## Advantages Over OAuth
 
@@ -491,6 +533,7 @@ For calendars shared with you:
 - **Simpler authentication**: Just copy and paste URLs
 - **Works immediately**: No approval processes or API quotas to worry about
 - **Multiple calendars**: Easy to add multiple calendars from different accounts
+- **Automatic deduplication**: Shared events across calendars are automatically deduplicated
 
 ## Alternative: Using OAuth
 

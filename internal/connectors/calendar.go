@@ -113,6 +113,7 @@ func (c *CalendarConnector) TestConnection(ctx context.Context) error {
 func (c *CalendarConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
 	urls := c.parseICalURLs(c.GetConfigString("ical_urls"))
 	var allActivities []timeline.Activity
+	seenEventUIDs := make(map[string]bool) // Track seen event UIDs to prevent duplicates
 
 	if c.isDebugMode() {
 		log.Printf("Calendar Debug: Fetching events for date %s from %d calendar(s)", date.Format("2006-01-02"), len(urls))
@@ -133,11 +134,42 @@ func (c *CalendarConnector) GetActivities(ctx context.Context, date time.Time) (
 		if c.isDebugMode() {
 			log.Printf("Calendar Debug: Found %d events from calendar %d", len(activities), i+1)
 		}
-		allActivities = append(allActivities, activities...)
+
+		// Add activities, filtering out duplicates based on event UID
+		duplicatesSkipped := 0
+		for _, activity := range activities {
+			// Extract event UID from the activity metadata
+			if eventUID, exists := activity.Metadata["event_id"]; exists && eventUID != "" {
+				if seenEventUIDs[eventUID] {
+					duplicatesSkipped++
+					if c.isDebugMode() {
+						log.Printf("Calendar Debug: Skipping duplicate event '%s' with UID: %s", activity.Title, eventUID)
+					}
+					continue
+				}
+				seenEventUIDs[eventUID] = true
+				allActivities = append(allActivities, activity)
+			} else {
+				// Handle activities without event_id or with empty UID (shouldn't happen with valid iCal data)
+				if c.isDebugMode() {
+					if !exists {
+						log.Printf("Calendar Debug: Warning - activity '%s' has no event_id, adding without deduplication", activity.Title)
+					} else {
+						log.Printf("Calendar Debug: Warning - activity '%s' has empty event_id, adding without deduplication", activity.Title)
+					}
+				}
+				allActivities = append(allActivities, activity)
+			}
+		}
+
+		if c.isDebugMode() && duplicatesSkipped > 0 {
+			log.Printf("Calendar Debug: Skipped %d duplicate events from calendar %d", duplicatesSkipped, i+1)
+		}
 	}
 
 	if c.isDebugMode() {
-		log.Printf("Calendar Debug: Total activities found: %d", len(allActivities))
+		log.Printf("Calendar Debug: Total activities found: %d (after deduplication)", len(allActivities))
+		log.Printf("Calendar Debug: Unique events tracked: %d", len(seenEventUIDs))
 	}
 
 	return allActivities, nil
