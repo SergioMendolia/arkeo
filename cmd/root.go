@@ -318,7 +318,14 @@ func init() {
 				return
 			}
 
-			if err := connector.Configure(connectorConfig.Config); err != nil {
+			// Inject app log level into connector config
+			configWithLogLevel := make(map[string]interface{})
+			for k, v := range connectorConfig.Config {
+				configWithLogLevel[k] = v
+			}
+			configWithLogLevel["log_level"] = configManager.GetConfig().App.LogLevel
+
+			if err := connector.Configure(configWithLogLevel); err != nil {
 				fmt.Fprintf(os.Stderr, "Error configuring connector: %v\n", err)
 				os.Exit(1)
 			}
@@ -465,7 +472,14 @@ func getEnabledConnectors(configManager *config.Manager, registry *connectors.Co
 		if configManager.IsConnectorEnabled(name) {
 			connectorConfig, exists := configManager.GetConnectorConfig(name)
 			if exists {
-				if err := connector.Configure(connectorConfig.Config); err != nil {
+				// Inject app log level into connector config
+				configWithLogLevel := make(map[string]interface{})
+				for k, v := range connectorConfig.Config {
+					configWithLogLevel[k] = v
+				}
+				configWithLogLevel["log_level"] = configManager.GetConfig().App.LogLevel
+
+				if err := connector.Configure(configWithLogLevel); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: Error configuring %s connector: %v\n", name, err)
 					continue
 				}

@@ -78,13 +78,11 @@ func NewGitLabConnector() *GitLabConnector {
 
 // isDebugMode checks if debug logging is enabled
 func (g *GitLabConnector) isDebugMode() bool {
-	// Check if AUTOTIME_DEBUG environment variable is set
-	if os.Getenv("AUTOTIME_DEBUG") != "" {
-		return true
+	// Check if log_level in config is set to debug
+	if logLevel, ok := g.config["log_level"].(string); ok {
+		return strings.ToLower(logLevel) == "debug"
 	}
-	// Check if LOG_LEVEL is set to debug
-	logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
-	return logLevel == "debug"
+	return false
 }
 
 // GetRequiredConfig returns the required configuration for GitLab
