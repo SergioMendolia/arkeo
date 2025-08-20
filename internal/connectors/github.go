@@ -128,7 +128,7 @@ func (g *GitHubConnector) getCommits(ctx context.Context, date time.Time) ([]tim
 	since := date.Format("2006-01-02T15:04:05Z")
 	until := date.Add(24 * time.Hour).Format("2006-01-02T15:04:05Z")
 
-	url := fmt.Sprintf("https://api.github.com/search/commits?q=author:%s+author-date:%s..%s&sort=author-date&order=desc",
+	url := fmt.Sprintf("https://api.github.com/search/commits?q=committer:%s+author-date:%s..%s&sort=author-date&order=desc",
 		username, since, until)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -181,8 +181,8 @@ func (g *GitHubConnector) getCommits(ctx context.Context, date time.Time) ([]tim
 		activity := timeline.Activity{
 			ID:          fmt.Sprintf("github-commit-%s", item.SHA[:8]),
 			Type:        timeline.ActivityTypeGitCommit,
-			Title:       item.Commit.Message,
-			Description: fmt.Sprintf("Commit to %s", item.Repository.Name),
+			Title:       fmt.Sprintf("%s on %s", item.Commit.Message, item.Repository.FullName),
+			Description: fmt.Sprintf("Commit to %s", item.Repository.FullName),
 			Timestamp:   commitTime,
 			Source:      "github",
 			URL:         item.HTMLURL,
