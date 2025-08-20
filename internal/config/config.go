@@ -16,12 +16,6 @@ type Config struct {
 
 	// Connector configurations
 	Connectors map[string]ConnectorConfig `yaml:"connectors" mapstructure:"connectors"`
-
-	// UI settings
-	UI UIConfig `yaml:"ui" mapstructure:"ui"`
-
-	// Data storage settings
-	Storage StorageConfig `yaml:"storage" mapstructure:"storage"`
 }
 
 // AppConfig contains application-level settings
@@ -49,36 +43,6 @@ type ConnectorConfig struct {
 
 	// Refresh interval for this connector
 	RefreshInterval string `yaml:"refresh_interval" mapstructure:"refresh_interval"`
-}
-
-// UIConfig contains user interface settings
-type UIConfig struct {
-	// Default view when starting the app
-	DefaultView string `yaml:"default_view" mapstructure:"default_view"`
-
-	// Color theme
-	Theme string `yaml:"theme" mapstructure:"theme"`
-
-	// Show timestamps in timeline
-	ShowTimestamps bool `yaml:"show_timestamps" mapstructure:"show_timestamps"`
-
-	// Group activities by time intervals
-	GroupByInterval string `yaml:"group_by_interval" mapstructure:"group_by_interval"`
-
-	// Maximum items to show per page
-	PageSize int `yaml:"page_size" mapstructure:"page_size"`
-}
-
-// StorageConfig contains data storage settings
-type StorageConfig struct {
-	// Storage type (file, memory, database)
-	Type string `yaml:"type" mapstructure:"type"`
-
-	// Storage location (for file-based storage)
-	Location string `yaml:"location" mapstructure:"location"`
-
-	// Retention period for activities
-	RetentionDays int `yaml:"retention_days" mapstructure:"retention_days"`
 }
 
 // Manager handles configuration loading, saving, and management
@@ -248,17 +212,6 @@ func (m *Manager) setDefaults() {
 	m.viper.SetDefault("app.log_level", "info")
 	m.viper.SetDefault("app.cache_duration", "1h")
 
-	// UI defaults
-	m.viper.SetDefault("ui.default_view", "timeline")
-	m.viper.SetDefault("ui.theme", "default")
-	m.viper.SetDefault("ui.show_timestamps", true)
-	m.viper.SetDefault("ui.group_by_interval", "1h")
-	m.viper.SetDefault("ui.page_size", 50)
-
-	// Storage defaults
-	m.viper.SetDefault("storage.type", "file")
-	m.viper.SetDefault("storage.location", "data")
-	m.viper.SetDefault("storage.retention_days", 90)
 }
 
 // createDefaultConfig creates a default configuration file
@@ -303,18 +256,6 @@ func (m *Manager) createDefaultConfig() error {
 				RefreshInterval: "15m",
 			},
 		},
-		UI: UIConfig{
-			DefaultView:     "timeline",
-			Theme:           "default",
-			ShowTimestamps:  true,
-			GroupByInterval: "1h",
-			PageSize:        50,
-		},
-		Storage: StorageConfig{
-			Type:          "file",
-			Location:      "data",
-			RetentionDays: 90,
-		},
 	}
 
 	// Save to viper and file
@@ -344,32 +285,6 @@ func (m *Manager) Validate() error {
 
 	if m.config.App.LogLevel == "" {
 		return fmt.Errorf("app.log_level cannot be empty")
-	}
-
-	// Validate UI config
-	validViews := []string{"timeline", "connectors", "settings"}
-	isValidView := false
-	for _, view := range validViews {
-		if m.config.UI.DefaultView == view {
-			isValidView = true
-			break
-		}
-	}
-	if !isValidView {
-		return fmt.Errorf("invalid default view: %s", m.config.UI.DefaultView)
-	}
-
-	// Validate storage config
-	validStorageTypes := []string{"file", "memory"}
-	isValidStorage := false
-	for _, storageType := range validStorageTypes {
-		if m.config.Storage.Type == storageType {
-			isValidStorage = true
-			break
-		}
-	}
-	if !isValidStorage {
-		return fmt.Errorf("invalid storage type: %s", m.config.Storage.Type)
 	}
 
 	return nil
