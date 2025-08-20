@@ -61,3 +61,44 @@ connectors:
       access_token: "your-gitlab-access-token"
 
 
+
+  # YouTrack connector - fetches activities and issue updates from YouTrack
+  youtrack:
+    enabled: false
+    config:
+      # YouTrack instance URL (e.g., https://mycompany.youtrack.cloud/)
+      base_url: "https://mycompany.youtrack.cloud/"
+
+      # YouTrack permanent token
+      # Get from: Profile > Account Security > New token
+      # Requires YouTrack scope permissions
+      token: "perm:your-youtrack-token-here"
+
+      # Username to filter activities for (optional, defaults to token owner)
+      username: "your-username"
+
+      # Include work items (time tracking entries)
+      include_work_items: true
+
+      # Include comment activities
+      include_comments: true
+
+      # Include issue field changes
+      include_issues: true
+
+      # NOTE: At least one activity category (include_work_items, include_comments, or include_issues)
+      # must be enabled. If all are disabled, CustomFieldCategory will be used as fallback.
+
+      # Custom API fields for compatibility (optional)
+      # Use this if you have issues with the default fields on older YouTrack versions
+      # Default includes idReadable for human-readable issue keys (PROJ-123 format)
+      # Also includes issue reference for comment activities
+      # api_fields: "id,timestamp,author(login,name),category(id,name),target(id,idReadable,summary,issue(id,idReadable,summary))"
+
+      # Enable debug logging for YouTrack connector (optional)
+      # This can also be set globally via app.log_level or environment variable LOG_LEVEL=debug
+      # log_level: "debug"
+
+
+
+

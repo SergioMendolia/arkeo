@@ -459,6 +459,7 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 	registry.Register(connectors.NewGitHubConnector())
 	registry.Register(connectors.NewCalendarConnector())
 	registry.Register(connectors.NewGitLabConnector())
+	registry.Register(connectors.NewYouTrackConnector())
 
 	return configManager, registry
 }

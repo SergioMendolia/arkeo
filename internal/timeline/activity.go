@@ -14,6 +14,7 @@ const (
 	ActivityTypeCalendar    ActivityType = "calendar"
 	ActivityTypeSlack       ActivityType = "slack"
 	ActivityTypeJira        ActivityType = "jira"
+	ActivityTypeYouTrack    ActivityType = "youtrack"
 	ActivityTypeCustom      ActivityType = "custom"
 	ActivityTypeFile        ActivityType = "file"
 	ActivityTypeBrowser     ActivityType = "browser"
