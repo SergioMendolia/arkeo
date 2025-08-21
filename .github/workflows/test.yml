@@ -64,4 +64,4 @@ jobs:
       run: go build -v ./...
 
     - name: Build binary
-      run: go build -o autotime .
+      run: go build -o arkeo .

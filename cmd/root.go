@@ -8,12 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/autotime/autotime/internal/config"
-	"github.com/autotime/autotime/internal/connectors"
-	"github.com/autotime/autotime/internal/display"
-	"github.com/autotime/autotime/internal/editor"
-	"github.com/autotime/autotime/internal/llm"
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/config"
+	"github.com/arkeo/arkeo/internal/connectors"
+	"github.com/arkeo/arkeo/internal/display"
+	"github.com/arkeo/arkeo/internal/editor"
+	"github.com/arkeo/arkeo/internal/llm"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 var (
@@ -39,9 +39,9 @@ func SetVersion(v string) {
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "autotime",
-	Short: "AutoTime - Daily Activity Timeline Builder",
-	Long: `AutoTime is a CLI tool that connects to various services to automatically
+	Use:   "arkeo",
+	Short: "arkeo - Daily Activity Timeline Builder",
+	Long: `arkeo is a CLI tool that connects to various services to automatically
 gather information about your daily activities and presents them in a chronological timeline.
 
 Features:
@@ -53,25 +53,25 @@ Features:
 
 Use the CLI commands to interact with the system and view your daily activities.`,
 	Example: `  # Show today's timeline
-  autotime timeline
+  arkeo timeline
 
   # Show timeline for a specific date
-  autotime timeline --date 2023-12-25
+  arkeo timeline --date 2023-12-25
 
   # Show detailed timeline with all information
-  autotime timeline --details
+  arkeo timeline --details
 
   # Analyze your timeline with AI
-  autotime analyze
+  arkeo analyze
 
   # Analyze with custom prompt
-  autotime analyze --prompt "What were my main focus areas?"
+  arkeo analyze --prompt "What were my main focus areas?"
 
   # List all connectors and their status
-  autotime connectors list
+  arkeo connectors list
 
   # Edit configuration
-  autotime config edit`,
+  arkeo config edit`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -86,7 +86,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default is $HOME/.config/autotime/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default is $HOME/.config/arkeo/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&date, "date", "", "date for operations (default is today, format: YYYY-MM-DD)")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "table", "output format (table, json, csv)")
 
@@ -129,8 +129,8 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 		enabledConnectors := getEnabledConnectors(configManager, registry)
 
 		if len(enabledConnectors) == 0 {
-			fmt.Println("No connectors are enabled. Use 'autotime connectors list' to see available connectors.")
-			fmt.Println("Enable a connector with: autotime connectors enable <connector-name>")
+			fmt.Println("No connectors are enabled. Use 'arkeo connectors list' to see available connectors.")
+			fmt.Println("Enable a connector with: arkeo connectors enable <connector-name>")
 			return
 		}
 
@@ -193,9 +193,9 @@ Use subcommands to test connection, show configuration, and manage LLM settings.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
-	Long:  `Display version information for AutoTime.`,
+	Long:  `Display version information for arkeo.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("AutoTime %s\n", version)
+		fmt.Printf("arkeo %s\n", version)
 		fmt.Println("Daily Activity Timeline Builder")
 		fmt.Println("Built with ❤️  using Go and Cobra")
 	},
@@ -228,7 +228,7 @@ and suggest improvements based on your daily activities.`,
 		config := configManager.GetConfig()
 		if config.LLM.APIKey == "" {
 			fmt.Fprintf(os.Stderr, "LLM API key not configured. Please set it in the configuration file:\n")
-			fmt.Fprintf(os.Stderr, "autotime config edit\n")
+			fmt.Fprintf(os.Stderr, "arkeo config edit\n")
 			fmt.Fprintf(os.Stderr, "\nOr set the llm.api_key field in your config file.\n")
 			os.Exit(1)
 		}
@@ -259,8 +259,8 @@ and suggest improvements based on your daily activities.`,
 		enabledConnectors := getEnabledConnectors(configManager, registry)
 
 		if len(enabledConnectors) == 0 {
-			fmt.Println("No connectors are enabled. Use 'autotime connectors list' to see available connectors.")
-			fmt.Println("Enable a connector with: autotime connectors enable <connector-name>")
+			fmt.Println("No connectors are enabled. Use 'arkeo connectors list' to see available connectors.")
+			fmt.Println("Enable a connector with: arkeo connectors enable <connector-name>")
 			return
 		}
 
@@ -315,7 +315,7 @@ and suggest improvements based on your daily activities.`,
 			fmt.Fprintf(os.Stderr, "• Check your API key configuration\n")
 			fmt.Fprintf(os.Stderr, "• Verify the base URL is correct (current: %s)\n", config.LLM.BaseURL)
 			fmt.Fprintf(os.Stderr, "• Ensure the model name is valid (current: %s)\n", llmConfig.Model)
-			fmt.Fprintf(os.Stderr, "• Test connection: autotime llm test\n")
+			fmt.Fprintf(os.Stderr, "• Test connection: arkeo llm test\n")
 			fmt.Fprintf(os.Stderr, "• For self-signed certificates, try setting skip_tls_verify: true\n")
 			fmt.Fprintf(os.Stderr, "• Run with --debug flag for more detailed information\n")
 			os.Exit(1)
@@ -360,8 +360,8 @@ func init() {
 				fmt.Printf("%-15s %s - %s\n", name, status, connector.Description())
 			}
 			fmt.Println()
-			fmt.Println("💡 Enable a connector: autotime connectors enable <name>")
-			fmt.Println("⚙️  Edit configuration: autotime config edit")
+			fmt.Println("💡 Enable a connector: arkeo connectors enable <name>")
+			fmt.Println("⚙️  Edit configuration: arkeo config edit")
 		},
 	})
 
@@ -389,7 +389,7 @@ func init() {
 			}
 
 			fmt.Printf("✅ Enabled connector: %s\n", connectorName)
-			fmt.Println("💡 Configure it by editing the config file: autotime config edit")
+			fmt.Println("💡 Configure it by editing the config file: arkeo config edit")
 		},
 	})
 
@@ -451,7 +451,7 @@ func init() {
 			}
 
 			fmt.Println()
-			fmt.Println("💡 Edit configuration: autotime config edit")
+			fmt.Println("💡 Edit configuration: arkeo config edit")
 		},
 	})
 
@@ -473,7 +473,7 @@ func init() {
 			connectorConfig, hasConfig := configManager.GetConnectorConfig(connectorName)
 			if !hasConfig || !connectorConfig.Enabled {
 				fmt.Printf("Connector '%s' is not enabled or configured\n", connectorName)
-				fmt.Println("Enable it with: autotime connectors enable " + connectorName)
+				fmt.Println("Enable it with: arkeo connectors enable " + connectorName)
 				return
 			}
 
@@ -494,7 +494,7 @@ func init() {
 			ctx := context.Background()
 			if err := connector.TestConnection(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "❌ Connection test failed: %v\n", err)
-				fmt.Println("💡 Check your configuration: autotime config edit")
+				fmt.Println("💡 Check your configuration: arkeo config edit")
 				os.Exit(1)
 			}
 
@@ -573,7 +573,7 @@ or falls back to a platform-specific default (nano on Unix, notepad on Windows).
 				os.Exit(1)
 			}
 			fmt.Println("✅ Configuration reset to defaults.")
-			fmt.Println("💡 Edit it with: autotime config edit")
+			fmt.Println("💡 Edit it with: arkeo config edit")
 		},
 	})
 
@@ -589,7 +589,7 @@ This will send a simple test message to verify that the API key, endpoint, and m
 
 			if config.LLM.APIKey == "" {
 				fmt.Fprintf(os.Stderr, "❌ LLM API key not configured\n")
-				fmt.Fprintf(os.Stderr, "Configure it with: autotime config edit\n")
+				fmt.Fprintf(os.Stderr, "Configure it with: arkeo config edit\n")
 				os.Exit(1)
 			}
 
@@ -654,8 +654,8 @@ This will send a simple test message to verify that the API key, endpoint, and m
 				fmt.Printf("API Key:      ✅ %s\n", key)
 			}
 
-			fmt.Printf("\n💡 Edit configuration: autotime config edit\n")
-			fmt.Printf("💡 Test connection: autotime llm test\n")
+			fmt.Printf("\n💡 Edit configuration: arkeo config edit\n")
+			fmt.Printf("💡 Test connection: arkeo llm test\n")
 		},
 	})
 
@@ -670,7 +670,7 @@ This helps diagnose connection issues by showing exactly what the API returns.`,
 
 			if config.LLM.APIKey == "" {
 				fmt.Fprintf(os.Stderr, "❌ LLM API key not configured\n")
-				fmt.Fprintf(os.Stderr, "Configure it with: autotime config edit\n")
+				fmt.Fprintf(os.Stderr, "Configure it with: arkeo config edit\n")
 				os.Exit(1)
 			}
 

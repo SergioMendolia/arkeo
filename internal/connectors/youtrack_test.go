@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 func TestNewYouTrackConnector(t *testing.T) {
@@ -627,17 +627,17 @@ func TestYouTrackConnector_DebugModeEnvironmentVariables(t *testing.T) {
 		t.Error("Debug mode should be enabled when LOG_LEVEL=debug")
 	}
 
-	// Test AUTOTIME_DEBUG environment variable
+	// Test ARKEO_DEBUG environment variable
 	t.Setenv("LOG_LEVEL", "info")
-	t.Setenv("AUTOTIME_DEBUG", "1")
+	t.Setenv("ARKEO_DEBUG", "1")
 	if !connector.isDebugMode() {
-		t.Error("Debug mode should be enabled when AUTOTIME_DEBUG=1")
+		t.Error("Debug mode should be enabled when ARKEO_DEBUG=1")
 	}
 
-	// Test AUTOTIME_DEBUG with true
-	t.Setenv("AUTOTIME_DEBUG", "true")
+	// Test ARKEO_DEBUG with true
+	t.Setenv("ARKEO_DEBUG", "true")
 	if !connector.isDebugMode() {
-		t.Error("Debug mode should be enabled when AUTOTIME_DEBUG=true")
+		t.Error("Debug mode should be enabled when ARKEO_DEBUG=true")
 	}
 
 	// Test config override takes precedence
@@ -648,7 +648,7 @@ func TestYouTrackConnector_DebugModeEnvironmentVariables(t *testing.T) {
 	}
 
 	t.Setenv("LOG_LEVEL", "info")
-	t.Setenv("AUTOTIME_DEBUG", "false")
+	t.Setenv("ARKEO_DEBUG", "false")
 	if !connector.isDebugMode() {
 		t.Error("Config log_level should override environment variables")
 	}

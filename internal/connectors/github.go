@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // GitHubConnector implements the Connector interface for GitHub

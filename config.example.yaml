@@ -1,5 +1,5 @@
-# AutoTime Configuration Example
-# Copy this file to ~/.config/autotime/config.yaml and customize as needed
+# arkeo Configuration Example
+# Copy this file to ~/.config/arkeo/config.yaml and customize as needed
 
 # Application settings
 app:

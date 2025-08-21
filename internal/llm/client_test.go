@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 func TestNewClient(t *testing.T) {

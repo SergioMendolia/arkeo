@@ -1,8 +1,8 @@
-# AutoTime Makefile
+# arkeo Makefile
 # Provides common development and build tasks
 
 # Variables
-BINARY_NAME=autotime
+BINARY_NAME=arkeo
 VERSION?=0.1.0
 BUILD_DIR=build
 DIST_DIR=dist
@@ -170,7 +170,7 @@ release: check build-all
 # Show help
 .PHONY: help
 help:
-	@echo "AutoTime Makefile Commands:"
+	@echo "arkeo Makefile Commands:"
 	@echo ""
 	@echo "Building:"
 	@echo "  build       - Build binary for current platform"

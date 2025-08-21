@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // Client represents an OpenAI-compatible LLM client

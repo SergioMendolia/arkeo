@@ -43,14 +43,14 @@ jobs:
     - name: Set binary name
       id: binary
       run: |
-        BINARY_NAME="autotime"
+        BINARY_NAME="arkeo"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
         echo "name=${BINARY_NAME}" >> $GITHUB_OUTPUT
 
         # Create archive name
-        ARCHIVE_NAME="autotime-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+        ARCHIVE_NAME="arkeo-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           ARCHIVE_NAME="${ARCHIVE_NAME}.zip"
         else
@@ -119,30 +119,30 @@ jobs:
         ### Linux/macOS
         \`\`\`bash
         # Extract the archive
-        tar -xzf autotime-$VERSION-linux-amd64.tar.gz
+        tar -xzf arkeo-$VERSION-linux-amd64.tar.gz
 
         # Make executable and move to PATH
-        chmod +x autotime
-        sudo mv autotime /usr/local/bin/
+        chmod +x arkeo
+        sudo mv arkeo /usr/local/bin/
         \`\`\`
 
         ### Windows
         \`\`\`powershell
         # Extract the zip file and add to PATH
-        # Or place autotime.exe in a directory that's already in your PATH
+        # Or place arkeo.exe in a directory that's already in your PATH
         \`\`\`
 
         ## Usage
 
         \`\`\`bash
         # Show help
-        autotime --help
+        arkeo --help
 
         # Show today's timeline
-        autotime timeline
+        arkeo timeline
 
         # Show detailed timeline
-        autotime timeline --details
+        arkeo timeline --details
         \`\`\`
         EOF
 

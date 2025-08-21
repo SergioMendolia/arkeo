@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // MockConnector implements the Connector interface for testing

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // Connector defines the interface for activity connectors

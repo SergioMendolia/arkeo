@@ -1,6 +1,6 @@
-# AutoTime - Daily Activity Timeline Builder
+# Arkeo - Daily Activity Timeline Builder
 
-AutoTime is a command-line tool that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline.
+arkeo is a command-line tool that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline.
 
 ## Features
 
@@ -15,50 +15,50 @@ AutoTime is a command-line tool that connects to various services to automatical
 ### From Source
 
 ```bash
-git clone https://github.com/autotime/autotime.git
-cd autotime
+git clone https://github.com/sergiomendolia/arkeo.git
+cd arkeo
 make build
 ```
 
 ### Using Go Install
 
 ```bash
-go install github.com/autotime/autotime@latest
+go install github.com/sergiomendolia/arkeo@latest
 ```
 
 ### Pre-built Binaries
 
-Download the latest release from [GitHub Releases](https://github.com/autotime/autotime/releases)
+Download the latest release from [GitHub Releases](https://github.com/sergiomendolia/arkeo/releases)
 
 ## Quick Start
 
 1. **Configure your first connector**:
    ```bash
    # Edit the configuration file
-   autotime config edit
+   arkeo config edit
 
    # Enable a connector
-   autotime connectors enable github
+   arkeo connectors enable github
    ```
 
 2. **View your timeline**:
    ```bash
    # Show today's activities
-   autotime timeline
+   arkeo timeline
 
    # Show detailed timeline
-   autotime timeline --details
+   arkeo timeline --details
 
    # Show timeline for specific date
-   autotime timeline --date 2023-12-25
+   arkeo timeline --date 2023-12-25
    ```
 
 3. **Analyze your timeline with AI**:
    ```bash
    # Analyze today's timeline
-   autotime analyze
+   arkeo analyze
    # Analyze specific date
-   autotime analyze --date 2023-12-25
+   arkeo analyze --date 2023-12-25
    ```
 
 ## Available Connectors
@@ -77,7 +77,7 @@ Fetches activities and issue updates from YouTrack.
 
 ## AI Timeline Analysis
 
-AutoTime can send your daily timeline to OpenAI-compatible language models to interpret a list of timesheet. This feature helps you:
+arkeo can send your daily timeline to OpenAI-compatible language models to interpret a list of timesheet. This feature helps you:
 
 ### Supported LLM Services
 
@@ -118,18 +118,18 @@ llm:
 
 ```bash
 # Test LLM connection
-autotime llm test
+arkeo llm test
 
 # Show LLM configuration
-autotime llm info
+arkeo llm info
 
 # Analyze timeline
-autotime analyze
+arkeo analyze
 ```
 
 ## Configuration
 
-AutoTime stores configuration in `~/.config/autotime/config.yaml`. You can edit this file directly or use `autotime config edit` to open it in your default editor.
+arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly or use `arkeo config edit` to open it in your default editor.
 
 ### Example Configuration
 See [config.example.yaml](config.example.yaml) for a complete configuration example.
@@ -147,7 +147,7 @@ package connectors
 import (
     "context"
     "time"
-    "github.com/autotime/autotime/internal/timeline"
+    "github.com/arkeo/arkeo/internal/timeline"
 )
 
 type MyConnector struct {
@@ -209,12 +209,12 @@ make release
 ### Common Issues
 
 1. **"No connectors are enabled"**
-   - Enable connectors: `autotime connectors enable <name>`
-   - Check configuration: `autotime config show`
+   - Enable connectors: `arkeo connectors enable <name>`
+   - Check configuration: `arkeo config show`
 
 2. **"Connection test failed"**
    - Verify API tokens and credentials
-   - Test connection: `autotime connectors test <name>`
+   - Test connection: `arkeo connectors test <name>`
 
 3. **"No activities found"**
    - Check date range: activities are fetched for the specific date
@@ -222,8 +222,8 @@ make release
    - Test connector connection
 
 4. **"LLM API key not configured"**
-   - Set API key: `autotime config edit`
-   - Test connection: `autotime llm test`
+   - Set API key: `arkeo config edit`
+   - Test connection: `arkeo llm test`
    - Verify model name is correct
 
 5. **"Connection test failed" (LLM)**

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // YouTrackConnector implements the Connector interface for YouTrack
@@ -110,8 +110,8 @@ func (y *YouTrackConnector) isDebugMode() bool {
 		}
 	}
 
-	// Check AUTOTIME_DEBUG environment variable
-	if debug := os.Getenv("AUTOTIME_DEBUG"); debug != "" {
+	// Check ARKEO_DEBUG environment variable
+	if debug := os.Getenv("ARKEO_DEBUG"); debug != "" {
 		return strings.ToLower(strings.TrimSpace(debug)) == "1" ||
 			strings.ToLower(strings.TrimSpace(debug)) == "true"
 	}

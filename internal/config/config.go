@@ -210,16 +210,16 @@ func (m *Manager) GetDataDir() (string, error) {
 func (m *Manager) getConfigDir() (string, error) {
 	// Try XDG_CONFIG_HOME first
 	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return filepath.Join(xdgConfig, "autotime"), nil
+		return filepath.Join(xdgConfig, "arkeo"), nil
 	}
 
-	// Fall back to ~/.config/autotime
+	// Fall back to ~/.config/arkeo
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(homeDir, ".config", "autotime"), nil
+	return filepath.Join(homeDir, ".config", "arkeo"), nil
 }
 
 // setDefaults sets default configuration values

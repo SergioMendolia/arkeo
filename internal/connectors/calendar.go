@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // CalendarConnector implements the Connector interface for Google Calendar using iCal feeds

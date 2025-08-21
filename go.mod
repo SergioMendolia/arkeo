@@ -1,4 +1,4 @@
-module github.com/autotime/autotime
+module github.com/arkeo/arkeo
 
 go 1.21.0
 

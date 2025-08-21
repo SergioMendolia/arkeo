@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // TimelineOptions controls how the timeline is displayed

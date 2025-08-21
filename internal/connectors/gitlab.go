@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autotime/autotime/internal/timeline"
+	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // GitLabConnector implements the Connector interface for GitLab
