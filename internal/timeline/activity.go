@@ -19,6 +19,7 @@ const (
 	ActivityTypeFile        ActivityType = "file"
 	ActivityTypeBrowser     ActivityType = "browser"
 	ActivityTypeApplication ActivityType = "application"
+	ActivityTypeSystem      ActivityType = "system"
 )
 
 // Activity represents a single activity/event in the timeline

@@ -4,7 +4,7 @@ arkeo is a command-line tool that connects to various services to automatically 
 
 ## Features
 
-- 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack and more
+- 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events and more
 - 📅 **Daily Timeline**: View all your activities in chronological order
 - 🤖 **AI Analysis**: Send your timeline to OpenAI-compatible LLMs for productivity insights
 - ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
@@ -74,6 +74,18 @@ Retrieves calendar events and meetings.
 
 ### YouTrack Connector
 Fetches activities and issue updates from YouTrack.
+
+### macOS System Events Connector
+Fetches screen lock/unlock events on macOS systems using system logs. This connector:
+- Monitors when your computer becomes idle (screen locks)
+- Tracks when your computer becomes active (screen unlocks)
+- Only works on macOS systems
+- Requires no additional configuration beyond enabling it
+- Uses the macOS `log show` command to retrieve loginwindow events
+
+**Activities Generated:**
+- "Computer is idle" - when the screen is locked
+- "Computer is active" - when the screen is unlocked
 
 ## AI Timeline Analysis
 
