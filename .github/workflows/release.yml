@@ -98,7 +98,8 @@ jobs:
 
     - name: Move artifacts to root
       run: |
-        mv ./artifacts/*.tar.gz ./artifacts/*.zip ./ || true
+        find ./artifacts -name "*.tar.gz" -exec mv {} ./ \;
+        find ./artifacts -name "*.zip" -exec mv {} ./ \;
 
     - name: Generate changelog
       id: changelog
