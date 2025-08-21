@@ -1,6 +1,8 @@
 # Arkeo - Daily Activity Timeline Builder
 
-arkeo is a command-line tool that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline.
+Arkeo is a command-line tool that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline. Instead of manually logging your activities or monitoring your computer actively, Arkeo collects data from the connected services after they have happened so you don't need to worry about having an application running in the background.
+
+The tool is designed to answer the question "What the hell did I do on that day?" when you need to recall your daily activities for timesheeting.
 
 ## Features
 
