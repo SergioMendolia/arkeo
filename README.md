@@ -6,6 +6,7 @@ AutoTime is a command-line tool that connects to various services to automatical
 
 - 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack and more
 - 📅 **Daily Timeline**: View all your activities in chronological order
+- 🤖 **AI Analysis**: Send your timeline to OpenAI-compatible LLMs for productivity insights
 - ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
 - 🔒 **Secure Storage**: API tokens and sensitive data stored locally
 
@@ -52,6 +53,21 @@ Download the latest release from [GitHub Releases](https://github.com/autotime/a
    autotime timeline --date 2023-12-25
    ```
 
+3. **Analyze your timeline with AI**:
+   ```bash
+   # Analyze today's timeline
+   autotime analyze
+
+   # Analyze with custom prompt
+   autotime analyze --prompt "What were my main focus areas today?"
+
+   # Analyze specific date
+   autotime analyze --date 2023-12-25
+
+   # Use different model
+   autotime analyze --model gpt-4
+   ```
+
 ## Available Connectors
 
 ### GitHub Connector
@@ -63,12 +79,79 @@ Fetches user activities from GitLab.
 ### Google Calendar
 Retrieves calendar events and meetings.
 
+### YouTrack Connector
+Fetches activities and issue updates from YouTrack.
+
+## AI Timeline Analysis
+
+AutoTime can send your daily timeline to OpenAI-compatible language models for analysis and insights. This feature helps you:
+
+- **Identify productivity patterns** in your daily activities
+- **Get insights** about focus areas and time allocation
+- **Receive suggestions** for improving your workflow
+- **Analyze work-life balance** and activity distribution
+
+### Supported LLM Services
+
+- **OpenAI** (GPT-3.5, GPT-4, GPT-4-turbo)
+- **Local models** via Ollama (llama2, mistral, etc.)
+- **Azure OpenAI** 
+- Any **OpenAI-compatible API**
+
+### Configuration
+
+Configure the LLM settings in your config file:
+
+```yaml
+llm:
+  # Base URL for OpenAI-compatible API
+  base_url: "https://api.openai.com/v1"
+  
+  # API key for authentication
+  api_key: "your-api-key-here"
+  
+  # Model name to use
+  model: "gpt-3.5-turbo"
+  
+  # Maximum tokens in response
+  max_tokens: 1000
+  
+  # Temperature for response creativity (0.0-2.0)
+  temperature: 0.7
+  
+  # Default analysis prompt
+  default_prompt: "Please analyze this daily timeline..."
+  
+  # Skip TLS certificate verification (for local development or self-signed certs)
+  # WARNING: Only enable for trusted local environments
+  skip_tls_verify: false
+```
+
+### LLM Commands
+
+```bash
+# Test LLM connection
+autotime llm test
+
+# Show LLM configuration
+autotime llm info
+
+# Analyze timeline
+autotime analyze
+
+# Use custom prompt
+autotime analyze --prompt "Focus on productivity patterns"
+
+# Override model
+autotime analyze --model gpt-4
+```
+
 ## Configuration
 
 AutoTime stores configuration in `~/.config/autotime/config.yaml`. You can edit this file directly or use `autotime config edit` to open it in your default editor.
 
 ### Example Configuration
-See [the example config](example_config.yaml)
+See [config.example.yaml](config.example.yaml) for a complete configuration example including LLM settings.
 
 
 ## Development
@@ -156,6 +239,18 @@ make release
    - Check date range: activities are fetched for the specific date
    - Verify connector is properly configured
    - Test connector connection
+
+4. **"LLM API key not configured"**
+   - Set API key: `autotime config edit`
+   - Test connection: `autotime llm test`
+   - Verify model name is correct
+
+5. **"Connection test failed" (LLM)**
+   - Check API key is valid
+   - Verify base URL is correct
+   - Ensure model name exists
+   - Check network connectivity
+   - For self-signed certificates, set `skip_tls_verify: true` in config
 
 ### Debug Mode
 
