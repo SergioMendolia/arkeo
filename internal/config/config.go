@@ -14,6 +14,9 @@ type Config struct {
 	// Application settings
 	App AppConfig `yaml:"app" mapstructure:"app"`
 
+	// LLM configuration
+	LLM LLMConfig `yaml:"llm" mapstructure:"llm"`
+
 	// Connector configurations
 	Connectors map[string]ConnectorConfig `yaml:"connectors" mapstructure:"connectors"`
 }
@@ -25,6 +28,30 @@ type AppConfig struct {
 
 	// Log level
 	LogLevel string `yaml:"log_level" mapstructure:"log_level"`
+}
+
+// LLMConfig contains LLM-specific settings
+type LLMConfig struct {
+	// Base URL for the OpenAI-compatible API
+	BaseURL string `yaml:"base_url" mapstructure:"base_url"`
+
+	// API key for authentication
+	APIKey string `yaml:"api_key" mapstructure:"api_key"`
+
+	// Model name to use
+	Model string `yaml:"model" mapstructure:"model"`
+
+	// Maximum tokens in response
+	MaxTokens int `yaml:"max_tokens" mapstructure:"max_tokens"`
+
+	// Temperature for response creativity (0.0 - 2.0)
+	Temperature float64 `yaml:"temperature" mapstructure:"temperature"`
+
+	// Default prompt for timeline analysis
+	DefaultPrompt string `yaml:"default_prompt" mapstructure:"default_prompt"`
+
+	// Skip TLS certificate verification (for local development or self-signed certs)
+	SkipTLSVerify bool `yaml:"skip_tls_verify" mapstructure:"skip_tls_verify"`
 }
 
 // ConnectorConfig holds configuration for a specific connector
@@ -201,6 +228,14 @@ func (m *Manager) setDefaults() {
 	m.viper.SetDefault("app.date_format", "2006-01-02")
 	m.viper.SetDefault("app.log_level", "info")
 
+	// LLM defaults
+	m.viper.SetDefault("llm.base_url", "https://api.openai.com/v1")
+	m.viper.SetDefault("llm.api_key", "")
+	m.viper.SetDefault("llm.model", "gpt-3.5-turbo")
+	m.viper.SetDefault("llm.max_tokens", 1000)
+	m.viper.SetDefault("llm.temperature", 0.7)
+	m.viper.SetDefault("llm.default_prompt", "Please analyze this daily timeline and provide insights about productivity, focus areas, and any patterns you notice. Also suggest areas for improvement.")
+	m.viper.SetDefault("llm.skip_tls_verify", false)
 }
 
 // createDefaultConfig creates a default configuration file
@@ -210,6 +245,15 @@ func (m *Manager) createDefaultConfig() error {
 		App: AppConfig{
 			DateFormat: "2006-01-02",
 			LogLevel:   "info",
+		},
+		LLM: LLMConfig{
+			BaseURL:       "https://api.openai.com/v1",
+			APIKey:        "",
+			Model:         "gpt-3.5-turbo",
+			MaxTokens:     1000,
+			Temperature:   0.7,
+			DefaultPrompt: "Please analyze this daily timeline and provide insights about productivity, focus areas, and any patterns you notice. Also suggest areas for improvement.",
+			SkipTLSVerify: false,
 		},
 		Connectors: map[string]ConnectorConfig{
 			"github": {
@@ -244,6 +288,15 @@ func (m *Manager) createDefaultConfig() error {
 	// Set config values in viper
 	m.viper.Set("app.date_format", defaultConfig.App.DateFormat)
 	m.viper.Set("app.log_level", defaultConfig.App.LogLevel)
+
+	// Set LLM configuration
+	m.viper.Set("llm.base_url", defaultConfig.LLM.BaseURL)
+	m.viper.Set("llm.api_key", defaultConfig.LLM.APIKey)
+	m.viper.Set("llm.model", defaultConfig.LLM.Model)
+	m.viper.Set("llm.max_tokens", defaultConfig.LLM.MaxTokens)
+	m.viper.Set("llm.temperature", defaultConfig.LLM.Temperature)
+	m.viper.Set("llm.default_prompt", defaultConfig.LLM.DefaultPrompt)
+	m.viper.Set("llm.skip_tls_verify", defaultConfig.LLM.SkipTLSVerify)
 
 	// Set connector configurations
 	for name, config := range defaultConfig.Connectors {
