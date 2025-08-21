@@ -118,3 +118,17 @@ connectors:
       # Default includes idReadable for human-readable issue keys (PROJ-123 format)
       # Also includes issue reference for comment activities
       # api_fields: "id,timestamp,author(login,name),category(id,name),target(id,idReadable,summary,issue(id,idReadable,summary))"
+
+  # macOS System Events connector - fetches screen lock/unlock events (macOS only)
+  macos_system:
+    enabled: false
+    config:
+      # Enable or disable the connector
+      # The connector automatically detects macOS and is only available on macOS systems
+      enabled: true
+
+      # Note: This connector uses the macOS 'log show' command to retrieve system events.
+      # It specifically monitors loginwindow events for screen lock state changes for the full day (00:00:00 to 23:59:59).
+      # When the screen is locked, it generates "Computer is idle" activities.
+      # When the screen is unlocked, it generates "Computer is active" activities.
+      # No additional configuration is required beyond enabling the connector.

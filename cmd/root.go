@@ -762,6 +762,7 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 	registry.Register(connectors.NewCalendarConnector())
 	registry.Register(connectors.NewGitLabConnector())
 	registry.Register(connectors.NewYouTrackConnector())
+	registry.Register(connectors.NewMacOSSystemConnector())
 
 	return configManager, registry
 }
