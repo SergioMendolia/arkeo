@@ -14,6 +14,7 @@ import (
 	"github.com/arkeo/arkeo/internal/editor"
 	"github.com/arkeo/arkeo/internal/llm"
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 var (
@@ -136,16 +137,16 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 
 		fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
 
+		// Convert connectors to utils.Connector interface
+		utilsConnectors := make(map[string]utils.Connector)
 		for name, connector := range enabledConnectors {
-			fmt.Printf("• Fetching from %s...\n", name)
-			activities, err := connector.GetActivities(ctx, targetDate)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error fetching from %s: %v\n", name, err)
-				continue
-			}
-			tl.AddActivities(activities)
-			fmt.Printf("  Found %d activities\n", len(activities))
+			utilsConnectors[name] = connector
 		}
+
+		// Fetch activities from all connectors in parallel
+		activities := utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
+		tl.AddActivitiesUnsorted(activities)
+		tl.EnsureSorted()
 
 		fmt.Println()
 
@@ -266,15 +267,23 @@ and suggest improvements based on your daily activities.`,
 
 		fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
 
+		// Convert connectors to utils.Connector interface
+		utilsConnectors := make(map[string]utils.Connector)
 		for name, connector := range enabledConnectors {
-			fmt.Printf("• Fetching from %s...\n", name)
-			activities, err := connector.GetActivities(ctx, targetDate)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error fetching from %s: %v\n", name, err)
-				continue
+			utilsConnectors[name] = connector
+		}
+
+		// Fetch activities from all connectors in parallel with stats
+		activities, stats := utils.FetchActivitiesWithStats(ctx, utilsConnectors, targetDate)
+		tl.AddActivitiesUnsorted(activities)
+		tl.EnsureSorted()
+
+		fmt.Printf("\n%s\n", stats.String())
+		if stats.HasErrors() {
+			fmt.Println("Connector errors:")
+			for name, err := range stats.ConnectorErrors {
+				fmt.Printf("  • %s: %v\n", name, err)
 			}
-			tl.AddActivities(activities)
-			fmt.Printf("  Found %d activities\n", len(activities))
 		}
 
 		if len(tl.Activities) == 0 {
@@ -746,6 +755,18 @@ func initConfig() {
 }
 
 // initializeSystem initializes the configuration manager and connector registry
+// ConnectorFactory represents a function that creates a connector
+type ConnectorFactory func() connectors.Connector
+
+// Available connector factories for lazy initialization
+var connectorFactories = map[string]ConnectorFactory{
+	"github":       func() connectors.Connector { return connectors.NewGitHubConnector() },
+	"calendar":     func() connectors.Connector { return connectors.NewCalendarConnector() },
+	"gitlab":       func() connectors.Connector { return connectors.NewGitLabConnector() },
+	"youtrack":     func() connectors.Connector { return connectors.NewYouTrackConnector() },
+	"macos_system": func() connectors.Connector { return connectors.NewMacOSSystemConnector() },
+}
+
 func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 	// Initialize configuration
 	configManager := config.NewManager()
@@ -754,15 +775,16 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 		os.Exit(1)
 	}
 
-	// Initialize connector registry
+	// Initialize connector registry with lazy loading
 	registry := connectors.NewConnectorRegistry()
 
-	// Register available connectors
-	registry.Register(connectors.NewGitHubConnector())
-	registry.Register(connectors.NewCalendarConnector())
-	registry.Register(connectors.NewGitLabConnector())
-	registry.Register(connectors.NewYouTrackConnector())
-	registry.Register(connectors.NewMacOSSystemConnector())
+	// Only register connectors that are enabled in configuration
+	for name, factory := range connectorFactories {
+		if configManager.IsConnectorEnabled(name) {
+			connector := factory()
+			registry.Register(connector)
+		}
+	}
 
 	return configManager, registry
 }

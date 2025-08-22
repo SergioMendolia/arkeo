@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // CalendarConnector implements the Connector interface for Google Calendar using iCal feeds
 type CalendarConnector struct {
 	*BaseConnector
-	httpClient *http.Client
 }
 
 // NewCalendarConnector creates a new calendar connector
@@ -26,10 +26,12 @@ func NewCalendarConnector() *CalendarConnector {
 			"calendar",
 			"Fetches Google Calendar events using secret iCal URLs",
 		),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
+}
+
+// getHTTPClient returns a pooled HTTP client for calendar requests
+func (c *CalendarConnector) getHTTPClient() *http.Client {
+	return utils.GetDefaultHTTPClient()
 }
 
 // GetRequiredConfig returns the required configuration for calendar
@@ -219,7 +221,7 @@ func (c *CalendarConnector) testICalURL(ctx context.Context, url string) error {
 		return err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.getHTTPClient().Do(req)
 	if err != nil {
 		return err
 	}
@@ -261,7 +263,7 @@ func (c *CalendarConnector) fetchCalendarEvents(ctx context.Context, url string,
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

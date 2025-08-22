@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // YouTrackConnector implements the Connector interface for YouTrack
 type YouTrackConnector struct {
 	*BaseConnector
-	httpClient *http.Client
 }
 
 // NewYouTrackConnector creates a new YouTrack connector
@@ -29,10 +29,12 @@ func NewYouTrackConnector() *YouTrackConnector {
 			"youtrack",
 			"Fetches activities and issue updates from YouTrack",
 		),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
+}
+
+// getHTTPClient returns a pooled HTTP client for YouTrack API requests
+func (y *YouTrackConnector) getHTTPClient() *http.Client {
+	return utils.GetDefaultHTTPClient()
 }
 
 // GetRequiredConfig returns the required configuration for YouTrack
@@ -224,7 +226,7 @@ func (y *YouTrackConnector) testAPIEndpoint(ctx context.Context, apiURL, token, 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.httpClient.Do(req)
+	resp, err := y.getHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to YouTrack %s: %w", endpointName, err)
 	}
@@ -375,7 +377,7 @@ func (y *YouTrackConnector) getCurrentUser(ctx context.Context) (*youTrackUser, 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.httpClient.Do(req)
+	resp, err := y.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +504,7 @@ func (y *YouTrackConnector) getActivities(ctx context.Context, date time.Time, u
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.httpClient.Do(req)
+	resp, err := y.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

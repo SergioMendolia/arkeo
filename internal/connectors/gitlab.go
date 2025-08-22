@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // GitLabConnector implements the Connector interface for GitLab
 type GitLabConnector struct {
 	*BaseConnector
-	httpClient *http.Client
 }
 
 // GitLabEvent represents an event from the GitLab events API
@@ -83,10 +83,12 @@ func NewGitLabConnector() *GitLabConnector {
 			"gitlab",
 			"Fetches user activities from GitLab Events API (all branches, merge requests, issues)",
 		),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
+}
+
+// getHTTPClient returns a pooled HTTP client for GitLab API requests
+func (g *GitLabConnector) getHTTPClient() *http.Client {
+	return utils.GetDefaultHTTPClient()
 }
 
 // stripHTMLTags removes HTML tags from a string
@@ -198,7 +200,7 @@ func (g *GitLabConnector) TestConnection(ctx context.Context) error {
 	req.Header.Set("Accept", "application/json")
 
 	// Send request
-	resp, err := g.httpClient.Do(req)
+	resp, err := g.getHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch GitLab events: %w", err)
 	}
@@ -310,7 +312,7 @@ func (g *GitLabConnector) getEvents(ctx context.Context, gitlabURL, accessToken 
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 		req.Header.Set("Accept", "application/json")
 
-		resp, err := g.httpClient.Do(req)
+		resp, err := g.getHTTPClient().Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch events page %d: %w", page, err)
 		}

@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // GitHubConnector implements the Connector interface for GitHub
 type GitHubConnector struct {
 	*BaseConnector
-	httpClient *http.Client
 }
 
 // NewGitHubConnector creates a new GitHub connector
@@ -24,10 +24,12 @@ func NewGitHubConnector() *GitHubConnector {
 			"github",
 			"Fetches git commits and GitHub activities",
 		),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
+}
+
+// getHTTPClient returns a pooled HTTP client for GitHub API requests
+func (g *GitHubConnector) getHTTPClient() *http.Client {
+	return utils.GetDefaultHTTPClient()
 }
 
 // GetRequiredConfig returns the required configuration for GitHub
@@ -85,7 +87,7 @@ func (g *GitHubConnector) TestConnection(ctx context.Context) error {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := g.getHTTPClient().Do(req)
 	if err != nil {
 		return err
 	}
@@ -139,7 +141,7 @@ func (g *GitHubConnector) getCommits(ctx context.Context, date time.Time) ([]tim
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.cloak-preview")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := g.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +228,7 @@ func (g *GitHubConnector) getIssuesAndPRs(ctx context.Context, date time.Time) (
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-		resp, err := g.httpClient.Do(req)
+		resp, err := g.getHTTPClient().Do(req)
 		if err != nil {
 			continue
 		}
