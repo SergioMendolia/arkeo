@@ -123,10 +123,6 @@ connectors:
   macos_system:
     enabled: false
     config:
-      # Enable or disable the connector
-      # The connector automatically detects macOS and is only available on macOS systems
-      enabled: true
-
       # Note: This connector uses the macOS 'log show' command to retrieve system events.
       # It specifically monitors loginwindow events for screen lock state changes for the full day (00:00:00 to 23:59:59).
       # When the screen is locked, it generates "Computer is idle" activities.
