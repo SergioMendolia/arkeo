@@ -24,22 +24,20 @@ func TestNewMacOSSystemConnector(t *testing.T) {
 func TestMacOSSystemConnector_ValidateConfig(t *testing.T) {
 	connector := NewMacOSSystemConnector()
 
-	// Test with valid config
-	config := map[string]interface{}{
-		"enabled": true,
-	}
+	// Test with empty config since no additional config is needed
+	config := map[string]interface{}{}
 
 	// Only test validation on macOS
 	if runtime.GOOS == "darwin" {
 		err := connector.ValidateConfig(config)
 		if err != nil {
-			t.Errorf("Expected no error for valid config, got: %v", err)
+			t.Errorf("Expected no error, got: %v", err)
 		}
 	} else {
-		// On non-macOS systems, should return error
+		// Should fail on non-macOS systems
 		err := connector.ValidateConfig(config)
 		if err == nil {
-			t.Error("Expected error on non-macOS systems")
+			t.Error("Expected error on non-macOS system")
 		}
 	}
 }
@@ -47,10 +45,8 @@ func TestMacOSSystemConnector_ValidateConfig(t *testing.T) {
 func TestMacOSSystemConnector_IsEnabled(t *testing.T) {
 	connector := NewMacOSSystemConnector()
 
-	// Configure with enabled=true
-	config := map[string]interface{}{
-		"enabled": true,
-	}
+	// Configure with empty config since no additional config is needed
+	config := map[string]interface{}{}
 	connector.Configure(config)
 	connector.SetEnabled(true)
 
@@ -61,7 +57,7 @@ func TestMacOSSystemConnector_IsEnabled(t *testing.T) {
 		}
 	} else {
 		if connector.IsEnabled() {
-			t.Error("Expected connector to be disabled on non-macOS systems")
+			t.Error("Expected connector to be disabled on non-macOS")
 		}
 	}
 }
@@ -70,24 +66,10 @@ func TestMacOSSystemConnector_GetRequiredConfig(t *testing.T) {
 	connector := NewMacOSSystemConnector()
 	config := connector.GetRequiredConfig()
 
-	if len(config) == 0 {
-		t.Error("Expected at least one config field")
-	}
-
-	// Check for enabled field
-	found := false
-	for _, field := range config {
-		if field.Key == "enabled" {
-			found = true
-			if field.Type != "bool" {
-				t.Errorf("Expected enabled field to be bool, got %s", field.Type)
-			}
-			break
-		}
-	}
-
-	if !found {
-		t.Error("Expected to find 'enabled' config field")
+	// After optimization, no additional config fields are required
+	// The redundant "enabled" field has been removed
+	if len(config) != 0 {
+		t.Errorf("Expected no config fields, got %d", len(config))
 	}
 }
 

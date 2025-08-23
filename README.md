@@ -8,7 +8,7 @@ The tool is designed to answer the question "What the hell did I do on that day?
 
 - 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events and more
 - 📅 **Daily Timeline**: View all your activities in chronological order
-- 🤖 **AI Analysis**: Send your timeline to OpenAI-compatible LLMs for productivity insights
+
 - ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
 - 🔒 **Secure Storage**: API tokens and sensitive data stored locally
 
@@ -55,13 +55,7 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
    arkeo timeline --date 2023-12-25
    ```
 
-3. **Analyze your timeline with AI**:
-   ```bash
-   # Analyze today's timeline
-   arkeo analyze
-   # Analyze specific date
-   arkeo analyze --date 2023-12-25
-   ```
+
 
 ## Available Connectors
 
@@ -89,57 +83,7 @@ Fetches screen lock/unlock events on macOS systems using system logs. This conne
 - "Computer is idle" - when the screen is locked
 - "Computer is active" - when the screen is unlocked
 
-## AI Timeline Analysis
 
-arkeo can send your daily timeline to OpenAI-compatible language models to interpret a list of timesheet. This feature helps you:
-
-### Supported LLM Services
-
-- **OpenAI** (GPT-3.5, GPT-4, GPT-4-turbo)
-- **Local models** via Ollama (llama2, mistral, etc.)
-- Any **OpenAI-compatible API**
-
-### Configuration
-
-Configure the LLM settings in your config file:
-
-```yaml
-llm:
-  # Base URL for OpenAI-compatible API
-  base_url: "https://api.openai.com/v1"
-
-  # API key for authentication
-  api_key: "your-api-key-here"
-
-  # Model name to use
-  model: "gpt-3.5-turbo"
-
-  # Maximum tokens in response
-  max_tokens: 1000
-
-  # Temperature for response creativity (0.0-2.0)
-  temperature: 0.7
-
-  # Default analysis prompt
-  default_prompt: "Please analyze this daily timeline..."
-
-  # Skip TLS certificate verification (for local development or self-signed certs)
-  # WARNING: Only enable for trusted local environments
-  skip_tls_verify: false
-```
-
-### LLM Commands
-
-```bash
-# Test LLM connection
-arkeo llm test
-
-# Show LLM configuration
-arkeo llm info
-
-# Analyze timeline
-arkeo analyze
-```
 
 ## Configuration
 
@@ -235,17 +179,7 @@ make release
    - Verify connector is properly configured
    - Test connector connection
 
-4. **"LLM API key not configured"**
-   - Set API key: `arkeo config edit`
-   - Test connection: `arkeo llm test`
-   - Verify model name is correct
 
-5. **"Connection test failed" (LLM)**
-   - Check API key is valid
-   - Verify base URL is correct
-   - Ensure model name exists
-   - Check network connectivity
-   - For self-signed certificates, set `skip_tls_verify: true` in config
 
 ### Debug Mode
 

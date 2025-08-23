@@ -61,8 +61,29 @@ func (t *Timeline) AddActivities(activities []Activity) {
 	t.Sort()
 }
 
+// AddActivitiesUnsorted adds multiple activities without sorting for bulk operations
+// Call EnsureSorted() when done with bulk additions for better performance
+func (t *Timeline) AddActivitiesUnsorted(activities []Activity) {
+	// Pre-allocate capacity if needed to reduce reallocations
+	if cap(t.Activities)-len(t.Activities) < len(activities) {
+		newCapacity := len(t.Activities) + len(activities)
+		newSlice := make([]Activity, len(t.Activities), newCapacity)
+		copy(newSlice, t.Activities)
+		t.Activities = newSlice
+	}
+	t.Activities = append(t.Activities, activities...)
+}
+
+// EnsureSorted sorts the timeline if not already sorted
+func (t *Timeline) EnsureSorted() {
+	t.Sort()
+}
+
 // Sort sorts activities by timestamp
 func (t *Timeline) Sort() {
+	if len(t.Activities) <= 1 {
+		return // No need to sort if 0 or 1 elements
+	}
 	sort.Slice(t.Activities, func(i, j int) bool {
 		return t.Activities[i].Timestamp.Before(t.Activities[j].Timestamp)
 	})
@@ -70,7 +91,8 @@ func (t *Timeline) Sort() {
 
 // FilterByType returns activities of a specific type
 func (t *Timeline) FilterByType(activityType ActivityType) []Activity {
-	var filtered []Activity
+	// Pre-allocate with estimated capacity to reduce reallocations
+	filtered := make([]Activity, 0, len(t.Activities)/4)
 	for _, activity := range t.Activities {
 		if activity.Type == activityType {
 			filtered = append(filtered, activity)
@@ -81,7 +103,8 @@ func (t *Timeline) FilterByType(activityType ActivityType) []Activity {
 
 // FilterBySource returns activities from a specific source
 func (t *Timeline) FilterBySource(source string) []Activity {
-	var filtered []Activity
+	// Pre-allocate with estimated capacity to reduce reallocations
+	filtered := make([]Activity, 0, len(t.Activities)/4)
 	for _, activity := range t.Activities {
 		if activity.Source == source {
 			filtered = append(filtered, activity)
@@ -92,7 +115,8 @@ func (t *Timeline) FilterBySource(source string) []Activity {
 
 // FilterByTimeRange returns activities within a specific time range
 func (t *Timeline) FilterByTimeRange(start, end time.Time) []Activity {
-	var filtered []Activity
+	// Pre-allocate with estimated capacity to reduce reallocations
+	filtered := make([]Activity, 0, len(t.Activities)/4)
 	for _, activity := range t.Activities {
 		if activity.Timestamp.After(start) && activity.Timestamp.Before(end) {
 			filtered = append(filtered, activity)
@@ -106,6 +130,9 @@ func (t *Timeline) GetTimeRange() (start, end time.Time) {
 	if len(t.Activities) == 0 {
 		return time.Time{}, time.Time{}
 	}
+
+	// Ensure timeline is sorted before getting time range
+	t.Sort()
 
 	start = t.Activities[0].Timestamp
 	end = t.Activities[len(t.Activities)-1].Timestamp

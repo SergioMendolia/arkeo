@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -12,8 +13,9 @@ import (
 	"github.com/arkeo/arkeo/internal/connectors"
 	"github.com/arkeo/arkeo/internal/display"
 	"github.com/arkeo/arkeo/internal/editor"
-	"github.com/arkeo/arkeo/internal/llm"
 	"github.com/arkeo/arkeo/internal/timeline"
+	"github.com/arkeo/arkeo/internal/ui"
+	"github.com/arkeo/arkeo/internal/utils"
 )
 
 var (
@@ -24,10 +26,11 @@ var (
 	maxItems    int
 	groupByHour bool
 
-	// Analyze command flags
-	customPrompt string
-	llmModel     string
-	debugMode    bool
+	// Enhanced timeline flags
+	useColors    bool
+	showTimeline bool
+	showProgress bool
+	showGaps     bool
 )
 
 var version = "dev" // Will be set by SetVersion function
@@ -47,7 +50,6 @@ gather information about your daily activities and presents them in a chronologi
 Features:
 • Connect to GitHub, Calendar, File System, and other services
 • View activities in a formatted timeline
-• Analyze your timeline with AI for productivity insights
 • Configure connectors through YAML configuration
 • Export activity data in various formats
 
@@ -60,12 +62,6 @@ Use the CLI commands to interact with the system and view your daily activities.
 
   # Show detailed timeline with all information
   arkeo timeline --details
-
-  # Analyze your timeline with AI
-  arkeo analyze
-
-  # Analyze with custom prompt
-  arkeo analyze --prompt "What were my main focus areas?"
 
   # List all connectors and their status
   arkeo connectors list
@@ -85,18 +81,19 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	// Disable the default completion command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default is $HOME/.config/arkeo/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&date, "date", "", "date for operations (default is today, format: YYYY-MM-DD)")
-	rootCmd.PersistentFlags().StringVar(&format, "format", "table", "output format (table, json, csv)")
+	rootCmd.PersistentFlags().StringVar(&format, "format", "visual", "output format (table, json, csv, visual)")
 
 	// Add subcommands
 	rootCmd.AddCommand(timelineCmd)
 	rootCmd.AddCommand(connectorsCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(analyzeCmd)
-	rootCmd.AddCommand(llmCmd)
 }
 
 // timelineCmd shows the timeline for a specific date
@@ -118,8 +115,8 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 		}
 		targetDate := parsedDate
 
-		// Initialize configuration and connectors
-		configManager, registry := initializeSystem()
+		// Initialize configuration, connectors and preferences
+		configManager, registry, _ := initializeSystem()
 
 		// Create timeline
 		tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
@@ -136,29 +133,62 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 
 		fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
 
-		for name, connector := range enabledConnectors {
-			fmt.Printf("• Fetching from %s...\n", name)
-			activities, err := connector.GetActivities(ctx, targetDate)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error fetching from %s: %v\n", name, err)
-				continue
-			}
-			tl.AddActivities(activities)
-			fmt.Printf("  Found %d activities\n", len(activities))
+		// Initialize progress tracker if enabled
+		var progress *ui.ConnectorProgress
+		if showProgress {
+			progress = ui.NewConnectorProgress(useColors)
 		}
+
+		// Convert connectors to utils.Connector interface and start progress tracking
+		utilsConnectors := make(map[string]utils.Connector)
+		for name, conn := range enabledConnectors {
+			utilsConnectors[name] = conn
+			if progress != nil {
+				progress.StartConnector(name)
+			}
+		}
+
+		// Fetch activities from all connectors with progress tracking
+		var activities []timeline.Activity
+		if progress != nil {
+			// Fetch with progress updates (simplified for now - would need utils.FetchActivitiesWithProgress)
+			activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
+			for name := range enabledConnectors {
+				// Simulate progress completion (in real implementation, this would be integrated into the fetch)
+				connectorActivities := 0
+				for _, activity := range activities {
+					if activity.Source == name {
+						connectorActivities++
+					}
+				}
+				progress.FinishConnector(name, connectorActivities, nil)
+			}
+			progress.PrintSummary()
+		} else {
+			activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
+		}
+
+		tl.AddActivitiesUnsorted(activities)
+		tl.EnsureSorted()
 
 		fmt.Println()
 
-		// Display timeline
-		opts := display.TimelineOptions{
-			ShowDetails:    showDetail,
-			ShowTimestamps: true,
-			GroupByHour:    groupByHour,
-			MaxItems:       maxItems,
-			Format:         format,
+		// Use enhanced display
+		enhancedOpts := display.EnhancedTimelineOptions{
+			TimelineOptions: display.TimelineOptions{
+				ShowDetails:    showDetail,
+				ShowTimestamps: true,
+				GroupByHour:    groupByHour,
+				MaxItems:       maxItems,
+				Format:         format,
+			},
+			UseColors:    useColors,
+			ShowTimeline: showTimeline,
+			ShowProgress: showProgress,
+			ShowGaps:     showGaps,
 		}
 
-		if err := display.DisplayTimeline(tl, opts); err != nil {
+		if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying timeline: %v\n", err)
 			os.Exit(1)
 		}
@@ -178,16 +208,12 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage application configuration",
 	Long: `View and modify application configuration settings. This includes
-connector settings, UI preferences, storage settings, and global application behavior.`,
+connector settings, UI preferences, storage settings, and global application behavior.
+
+Use subcommands to manage both configuration and preferences via the YAML configuration file.`,
 }
 
-// llmCmd manages LLM configuration and testing
-var llmCmd = &cobra.Command{
-	Use:   "llm",
-	Short: "Manage LLM configuration and testing",
-	Long: `Configure and test the AI language model integration for timeline analysis.
-Use subcommands to test connection, show configuration, and manage LLM settings.`,
-}
+// Version command provides version information
 
 // versionCmd shows version information
 var versionCmd = &cobra.Command{
@@ -201,153 +227,93 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-// analyzeCmd sends timeline to LLM for analysis
-var analyzeCmd = &cobra.Command{
-	Use:   "analyze",
-	Short: "Analyze activity timeline using AI",
-	Long: `Send the activity timeline for a specific date to an OpenAI-compatible LLM
-for analysis and insights. The LLM will provide productivity insights, identify patterns,
-and suggest improvements based on your daily activities.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// Parse date
-		if date == "" {
-			date = time.Now().Format("2006-01-02")
-		}
-
-		parsedDate, err := time.Parse("2006-01-02", date)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid date format. Use YYYY-MM-DD: %v\n", err)
-			os.Exit(1)
-		}
-		targetDate := parsedDate
-
-		// Initialize configuration and connectors
-		configManager, registry := initializeSystem()
-
-		// Check LLM configuration
-		config := configManager.GetConfig()
-		if config.LLM.APIKey == "" {
-			fmt.Fprintf(os.Stderr, "LLM API key not configured. Please set it in the configuration file:\n")
-			fmt.Fprintf(os.Stderr, "arkeo config edit\n")
-			fmt.Fprintf(os.Stderr, "\nOr set the llm.api_key field in your config file.\n")
-			os.Exit(1)
-		}
-
-		// Show debug information if requested
-		if debugMode {
-			fmt.Printf("🔍 Debug Information:\n")
-			fmt.Printf("  Base URL: %s\n", config.LLM.BaseURL)
-			fmt.Printf("  Model: %s\n", config.LLM.Model)
-			fmt.Printf("  Max Tokens: %d\n", config.LLM.MaxTokens)
-			fmt.Printf("  Temperature: %.1f\n", config.LLM.Temperature)
-			fmt.Printf("  Skip TLS: %t\n", config.LLM.SkipTLSVerify)
-			fmt.Printf("  API Key: %s\n", func() string {
-				key := config.LLM.APIKey
-				if len(key) > 8 {
-					return key[:4] + "..." + key[len(key)-4:]
-				}
-				return "***"
-			}())
-			fmt.Println()
-		}
-
-		// Create timeline
-		tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
-
-		// Fetch activities from enabled connectors
-		ctx := context.Background()
-		enabledConnectors := getEnabledConnectors(configManager, registry)
-
-		if len(enabledConnectors) == 0 {
-			fmt.Println("No connectors are enabled. Use 'arkeo connectors list' to see available connectors.")
-			fmt.Println("Enable a connector with: arkeo connectors enable <connector-name>")
-			return
-		}
-
-		fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
-
-		for name, connector := range enabledConnectors {
-			fmt.Printf("• Fetching from %s...\n", name)
-			activities, err := connector.GetActivities(ctx, targetDate)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error fetching from %s: %v\n", name, err)
-				continue
-			}
-			tl.AddActivities(activities)
-			fmt.Printf("  Found %d activities\n", len(activities))
-		}
-
-		if len(tl.Activities) == 0 {
-			fmt.Printf("No activities found for %s. Nothing to analyze.\n", targetDate.Format("January 2, 2006"))
-			return
-		}
-
-		fmt.Printf("\nAnalyzing %d activities with AI...\n\n", len(tl.Activities))
-
-		// Create LLM client
-		llmConfig := llm.Config{
-			BaseURL:       config.LLM.BaseURL,
-			APIKey:        config.LLM.APIKey,
-			Model:         config.LLM.Model,
-			MaxTokens:     config.LLM.MaxTokens,
-			Temperature:   config.LLM.Temperature,
-			SkipTLSVerify: config.LLM.SkipTLSVerify,
-		}
-
-		// Override model if specified via flag
-		if llmModel != "" {
-			llmConfig.Model = llmModel
-		}
-
-		client := llm.NewClient(llmConfig)
-
-		// Determine prompt
-		prompt := config.LLM.DefaultPrompt
-		if customPrompt != "" {
-			prompt = customPrompt
-		}
-
-		// Send timeline to LLM for analysis
-		analysis, err := client.AnalyzeTimeline(ctx, tl, prompt, llmConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error analyzing timeline: %v\n", err)
-			fmt.Fprintf(os.Stderr, "\nTroubleshooting:\n")
-			fmt.Fprintf(os.Stderr, "• Check your API key configuration\n")
-			fmt.Fprintf(os.Stderr, "• Verify the base URL is correct (current: %s)\n", config.LLM.BaseURL)
-			fmt.Fprintf(os.Stderr, "• Ensure the model name is valid (current: %s)\n", llmConfig.Model)
-			fmt.Fprintf(os.Stderr, "• Test connection: arkeo llm test\n")
-			fmt.Fprintf(os.Stderr, "• For self-signed certificates, try setting skip_tls_verify: true\n")
-			fmt.Fprintf(os.Stderr, "• Run with --debug flag for more detailed information\n")
-			os.Exit(1)
-		}
-
-		// Display analysis
-		fmt.Println("🤖 AI Analysis")
-		fmt.Println("==============")
-		fmt.Println(analysis)
-	},
-}
-
 func init() {
+	// Add preferences subcommands to config command
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "preferences",
+		Short: "Show current preferences",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Initialize configuration and preferences
+			_, _, prefsManager := initializeSystem()
+			if err := prefsManager.Load(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading preferences: %v\n", err)
+				os.Exit(1)
+			}
+
+			prefs := prefsManager.GetPreferences()
+			fmt.Println("Current Preferences:")
+			fmt.Println(strings.Repeat("=", 40))
+
+			fmt.Printf("Display:\n")
+			fmt.Printf("  Use Colors:      %v\n", prefs.UseColors)
+			fmt.Printf("  Show Details:    %v\n", prefs.ShowDetails)
+			fmt.Printf("  Show Progress:   %v\n", prefs.ShowProgress)
+			fmt.Printf("  Default Format:  %s\n", prefs.DefaultFormat)
+
+			fmt.Printf("\nTimeline:\n")
+			fmt.Printf("  Group by Hour:   %v\n", prefs.GroupByHour)
+			fmt.Printf("  Max Items:       %d\n", prefs.MaxItems)
+			fmt.Printf("  Show Timeline:   %v\n", prefs.ShowTimeline)
+
+			// Recent dates and quick dates have been removed from preferences
+		},
+	})
+
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "preferences-reset",
+		Short: "Reset preferences to defaults",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Initialize configuration and preferences
+			_, _, prefsManager := initializeSystem()
+
+			if err := prefsManager.Reset(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error resetting preferences: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("✅ Preferences reset to defaults")
+		},
+	})
+
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "preferences-export",
+		Short: "Export preferences to JSON",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Initialize configuration and preferences
+			_, _, prefsManager := initializeSystem()
+			if err := prefsManager.Load(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading preferences: %v\n", err)
+				os.Exit(1)
+			}
+
+			jsonData, err := prefsManager.Export()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error exporting preferences: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println(jsonData)
+		},
+	})
+
+	// Add all subcommands to root
 	// Timeline flags
 	timelineCmd.Flags().BoolVar(&showDetail, "details", false, "show detailed information for each activity")
 	timelineCmd.Flags().IntVar(&maxItems, "max", 500, "maximum number of activities to show")
 	timelineCmd.Flags().BoolVar(&groupByHour, "group", false, "group activities by hour")
 
-	// Analyze command flags
-	analyzeCmd.Flags().StringVar(&customPrompt, "prompt", "", "custom prompt for AI analysis")
-	analyzeCmd.Flags().StringVar(&llmModel, "model", "", "override LLM model to use")
-	analyzeCmd.Flags().BoolVar(&debugMode, "debug", false, "show debug information")
-
-	// LLM command flags
-	llmCmd.PersistentFlags().StringVar(&llmModel, "model", "", "override LLM model to use")
+	// Enhanced timeline flags
+	timelineCmd.Flags().BoolVar(&useColors, "colors", true, "use colors in output")
+	timelineCmd.Flags().BoolVar(&showTimeline, "visual", true, "show visual timeline view")
+	timelineCmd.Flags().BoolVar(&showProgress, "progress", true, "show progress indicators")
+	timelineCmd.Flags().BoolVar(&showGaps, "gaps", true, "highlight time gaps")
 
 	// Connectors subcommands
 	connectorsCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all available connectors",
 		Run: func(cmd *cobra.Command, args []string) {
-			configManager, registry := initializeSystem()
+			configManager, registry, _ := initializeSystem()
 
 			fmt.Println("Available Connectors:")
 			fmt.Println("=====================")
@@ -370,7 +336,7 @@ func init() {
 		Short: "Enable a connector",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			configManager, registry := initializeSystem()
+			configManager, registry, _ := initializeSystem()
 			connectorName := args[0]
 
 			if _, exists := registry.Get(connectorName); !exists {
@@ -398,30 +364,7 @@ func init() {
 		Short: "Disable a connector",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			configManager, registry := initializeSystem()
-			connectorName := args[0]
-
-			if _, exists := registry.Get(connectorName); !exists {
-				fmt.Fprintf(os.Stderr, "Connector '%s' not found\n", connectorName)
-				os.Exit(1)
-			}
-
-			configManager.DisableConnector(connectorName)
-			if err := configManager.Save(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error saving configuration: %v\n", err)
-				os.Exit(1)
-			}
-
-			fmt.Printf("❌ Disabled connector: %s\n", connectorName)
-		},
-	})
-
-	connectorsCmd.AddCommand(&cobra.Command{
-		Use:   "info [connector]",
-		Short: "Show connector information and configuration requirements",
-		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			_, registry := initializeSystem()
+			configManager, registry, _ := initializeSystem()
 			connectorName := args[0]
 
 			connector, exists := registry.Get(connectorName)
@@ -430,28 +373,138 @@ func init() {
 				os.Exit(1)
 			}
 
-			fmt.Printf("Connector: %s\n", connector.Name())
-			fmt.Printf("Description: %s\n", connector.Description())
-			fmt.Println(fmt.Sprintf("%s", "="))
-			fmt.Println()
+			// Get required config fields to check if all required fields are configured
+			requiredFields := connector.GetRequiredConfig()
 
-			requiredConfig := connector.GetRequiredConfig()
-			if len(requiredConfig) > 0 {
-				fmt.Println("Required Configuration:")
-				for _, field := range requiredConfig {
-					required := ""
-					if field.Required {
-						required = " (required)"
+			// Check if all required fields are configured
+			missingFields := []string{}
+			for _, field := range requiredFields {
+				if field.Required {
+					val, exists := configManager.GetConnectorConfigValue(connectorName, field.Key)
+					isEmptyString := false
+					if str, ok := val.(string); ok && str == "" {
+						isEmptyString = true
 					}
-					fmt.Printf("  %-20s %s%s\n", field.Key+":", field.Description, required)
-					if field.Default != "" {
-						fmt.Printf("  %-20s Default: %s\n", "", field.Default)
+
+					if !exists || val == nil || isEmptyString {
+						missingFields = append(missingFields, field.Key)
 					}
 				}
 			}
 
+			if len(missingFields) > 0 {
+				fmt.Fprintf(os.Stderr, "Cannot enable connector '%s' - missing required configuration:\n", connectorName)
+				for _, field := range missingFields {
+					fmt.Fprintf(os.Stderr, "  • %s\n", field)
+				}
+				fmt.Fprintf(os.Stderr, "\nUse 'arkeo connectors config %s' to configure these fields\n", connectorName)
+				os.Exit(1)
+			}
+
+			configManager.EnableConnector(connectorName)
+			if err := configManager.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error saving configuration: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("Connector '%s' enabled\n", connectorName)
+		},
+	})
+
+	connectorsCmd.AddCommand(&cobra.Command{
+		Use:   "info [connector]",
+		Short: "Show connector information and configuration requirements",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			configManager, registry, _ := initializeSystem()
+			connectorName := args[0]
+
+			connector, exists := registry.Get(connectorName)
+			if !exists {
+				fmt.Fprintf(os.Stderr, "Connector '%s' not found\n", connectorName)
+				os.Exit(1)
+			}
+
+			// Get connector configuration status
+			connectorConfig, configExists := configManager.GetConnectorConfig(connectorName)
+
+			// Status indicators
+			enabledStatus := "❌ Disabled"
+			if configManager.IsConnectorEnabled(connectorName) {
+				enabledStatus = "✅ Enabled"
+			}
+
+			// Header
+			fmt.Printf("Connector: %s (%s)\n", connector.Name(), enabledStatus)
+			fmt.Printf("Description: %s\n", connector.Description())
+			fmt.Println(strings.Repeat("=", 50))
 			fmt.Println()
-			fmt.Println("💡 Edit configuration: arkeo config edit")
+
+			// Configuration fields
+			requiredConfig := connector.GetRequiredConfig()
+			if len(requiredConfig) > 0 {
+				fmt.Println("Configuration Fields:")
+				fmt.Println(strings.Repeat("-", 50))
+
+				for _, field := range requiredConfig {
+					// Determine if field is configured
+					valueStr := "<not set>"
+					configuredSymbol := " "
+
+					if configExists {
+						if val, exists := connectorConfig.Config[field.Key]; exists && val != nil {
+							switch v := val.(type) {
+							case string:
+								if field.Type == "secret" && v != "" {
+									valueStr = "********"
+									configuredSymbol = "✓"
+								} else if v != "" {
+									valueStr = v
+									configuredSymbol = "✓"
+								}
+							case bool:
+								valueStr = fmt.Sprintf("%t", v)
+								configuredSymbol = "✓"
+							case int:
+								valueStr = fmt.Sprintf("%d", v)
+								configuredSymbol = "✓"
+							case float64:
+								valueStr = fmt.Sprintf("%.0f", v)
+								configuredSymbol = "✓"
+							default:
+								valueStr = fmt.Sprintf("%v", val)
+								configuredSymbol = "✓"
+							}
+						}
+					}
+
+					// Format field status
+					requiredMark := " "
+					if field.Required {
+						requiredMark = "*"
+					}
+
+					fmt.Printf(" %s%s %-18s │ %-10s │ %s\n",
+						configuredSymbol, requiredMark, field.Key, field.Type, valueStr)
+					fmt.Printf("    └─ %s\n", field.Description)
+
+					// Show default if available
+					if field.Default != nil && valueStr == "<not set>" {
+						fmt.Printf("       Default: %v\n", field.Default)
+					}
+					fmt.Println()
+				}
+
+				fmt.Println("* Required field")
+			}
+
+			fmt.Println()
+			fmt.Printf("📝 Configure: arkeo connectors config %s\n", connectorName)
+			if configManager.IsConnectorEnabled(connectorName) {
+				fmt.Printf("🔌 Disable: arkeo connectors disable %s\n", connectorName)
+			} else {
+				fmt.Printf("🔌 Enable: arkeo connectors enable %s\n", connectorName)
+			}
 		},
 	})
 
@@ -460,7 +513,7 @@ func init() {
 		Short: "Test connector connection",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			configManager, registry := initializeSystem()
+			configManager, registry, _ := initializeSystem()
 			connectorName := args[0]
 
 			connector, exists := registry.Get(connectorName)
@@ -507,7 +560,7 @@ func init() {
 		Use:   "show",
 		Short: "Show current configuration path and summary",
 		Run: func(cmd *cobra.Command, args []string) {
-			configManager, registry := initializeSystem()
+			configManager, registry, _ := initializeSystem()
 
 			fmt.Printf("Configuration file: %s\n", configManager.GetConfigPath())
 
@@ -517,13 +570,32 @@ func init() {
 			fmt.Printf("  Log level: %s\n", cfg.App.LogLevel)
 
 			fmt.Printf("\nConnector status:\n")
-			for name := range registry.List() {
-				enabled := configManager.IsConnectorEnabled(name)
+			for name, connector := range registry.List() {
 				status := "❌ Disabled"
-				if enabled {
+				configStatus := ""
+
+				if configManager.IsConnectorEnabled(name) {
 					status = "✅ Enabled"
 				}
-				fmt.Printf("  %-15s %s\n", name, status)
+
+				// Check if all required fields are configured
+				requiredFields := connector.GetRequiredConfig()
+				missingFields := 0
+
+				for _, field := range requiredFields {
+					if field.Required {
+						val, exists := configManager.GetConnectorConfigValue(name, field.Key)
+						if !exists || val == nil || (field.Type == "string" && val.(string) == "") {
+							missingFields++
+						}
+					}
+				}
+
+				if missingFields > 0 {
+					configStatus = fmt.Sprintf(" (Missing %d required fields)", missingFields)
+				}
+
+				fmt.Printf("  %s: %s%s\n", name, status, configStatus)
 			}
 		},
 	})
@@ -556,9 +628,11 @@ or falls back to a platform-specific default (nano on Unix, notepad on Windows).
 
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "reset",
-		Short: "Reset configuration to defaults",
+		Short: "Reset configuration by copying example config file",
+		Long: `Reset your configuration by copying the example config file (config.example.yaml).
+This will overwrite your current configuration with the example defaults.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Print("This will reset your configuration to defaults. Continue? (y/N): ")
+			fmt.Print("This will reset your configuration by copying the example config. All your settings will be lost. Continue? (y/N): ")
 			var response string
 			fmt.Scanln(&response)
 
@@ -572,151 +646,9 @@ or falls back to a platform-specific default (nano on Unix, notepad on Windows).
 				fmt.Fprintf(os.Stderr, "Error resetting configuration: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Println("✅ Configuration reset to defaults.")
+			fmt.Println("✅ Configuration has been reset using example config file.")
+			fmt.Printf("📄 Your config file is located at: %s\n", configManager.GetConfigPath())
 			fmt.Println("💡 Edit it with: arkeo config edit")
-		},
-	})
-
-	// LLM subcommands
-	llmCmd.AddCommand(&cobra.Command{
-		Use:   "test",
-		Short: "Test LLM API connection",
-		Long: `Test the connection to the configured LLM API endpoint.
-This will send a simple test message to verify that the API key, endpoint, and model are working correctly.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			configManager, _ := initializeSystem()
-			config := configManager.GetConfig()
-
-			if config.LLM.APIKey == "" {
-				fmt.Fprintf(os.Stderr, "❌ LLM API key not configured\n")
-				fmt.Fprintf(os.Stderr, "Configure it with: arkeo config edit\n")
-				os.Exit(1)
-			}
-
-			llmConfig := llm.Config{
-				BaseURL:       config.LLM.BaseURL,
-				APIKey:        config.LLM.APIKey,
-				Model:         config.LLM.Model,
-				MaxTokens:     config.LLM.MaxTokens,
-				Temperature:   config.LLM.Temperature,
-				SkipTLSVerify: config.LLM.SkipTLSVerify,
-			}
-
-			// Override model if specified via flag
-			if llmModel != "" {
-				llmConfig.Model = llmModel
-			}
-
-			client := llm.NewClient(llmConfig)
-
-			fmt.Printf("Testing connection to %s...\n", config.LLM.BaseURL)
-			fmt.Printf("Using model: %s\n", llmConfig.Model)
-
-			ctx := context.Background()
-			if err := client.TestConnection(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Connection test failed: %v\n", err)
-				fmt.Fprintf(os.Stderr, "\nTroubleshooting:\n")
-				fmt.Fprintf(os.Stderr, "• Check your API key is valid\n")
-				fmt.Fprintf(os.Stderr, "• Verify the base URL is correct\n")
-				fmt.Fprintf(os.Stderr, "• Ensure the model name exists\n")
-				fmt.Fprintf(os.Stderr, "• Check your network connection\n")
-				os.Exit(1)
-			}
-
-			fmt.Printf("✅ LLM connection test successful!\n")
-		},
-	})
-
-	llmCmd.AddCommand(&cobra.Command{
-		Use:   "info",
-		Short: "Show LLM configuration",
-		Long:  `Display current LLM configuration settings.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			configManager, _ := initializeSystem()
-			config := configManager.GetConfig()
-
-			fmt.Printf("LLM Configuration\n")
-			fmt.Printf("=================\n")
-			fmt.Printf("Base URL:     %s\n", config.LLM.BaseURL)
-			fmt.Printf("Model:        %s\n", config.LLM.Model)
-			fmt.Printf("Max Tokens:   %d\n", config.LLM.MaxTokens)
-			fmt.Printf("Temperature:  %.1f\n", config.LLM.Temperature)
-			fmt.Printf("Skip TLS:     %t\n", config.LLM.SkipTLSVerify)
-
-			if config.LLM.APIKey == "" {
-				fmt.Printf("API Key:      ❌ Not configured\n")
-			} else {
-				// Show masked API key
-				key := config.LLM.APIKey
-				if len(key) > 8 {
-					key = key[:4] + "..." + key[len(key)-4:]
-				}
-				fmt.Printf("API Key:      ✅ %s\n", key)
-			}
-
-			fmt.Printf("\n💡 Edit configuration: arkeo config edit\n")
-			fmt.Printf("💡 Test connection: arkeo llm test\n")
-		},
-	})
-
-	llmCmd.AddCommand(&cobra.Command{
-		Use:   "debug",
-		Short: "Debug LLM API connection and response",
-		Long: `Send a debug request to the LLM API and show the raw response.
-This helps diagnose connection issues by showing exactly what the API returns.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			configManager, _ := initializeSystem()
-			config := configManager.GetConfig()
-
-			if config.LLM.APIKey == "" {
-				fmt.Fprintf(os.Stderr, "❌ LLM API key not configured\n")
-				fmt.Fprintf(os.Stderr, "Configure it with: arkeo config edit\n")
-				os.Exit(1)
-			}
-
-			llmConfig := llm.Config{
-				BaseURL:       config.LLM.BaseURL,
-				APIKey:        config.LLM.APIKey,
-				Model:         config.LLM.Model,
-				MaxTokens:     50,
-				Temperature:   0,
-				SkipTLSVerify: config.LLM.SkipTLSVerify,
-			}
-
-			if llmModel != "" {
-				llmConfig.Model = llmModel
-			}
-
-			fmt.Printf("🔍 Debug LLM API Request\n")
-			fmt.Printf("========================\n")
-			fmt.Printf("URL: %s/chat/completions\n", config.LLM.BaseURL)
-			fmt.Printf("Model: %s\n", llmConfig.Model)
-			fmt.Printf("Skip TLS: %t\n", config.LLM.SkipTLSVerify)
-			fmt.Printf("\n")
-
-			client := llm.NewClient(llmConfig)
-			ctx := context.Background()
-
-			// Create a simple debug request
-			debugReq := llm.ChatCompletionRequest{
-				Model: llmConfig.Model,
-				Messages: []llm.ChatMessage{
-					{Role: "user", Content: "Reply with exactly: DEBUG_OK"},
-				},
-				MaxTokens:   10,
-				Temperature: 0,
-				Stream:      false,
-			}
-
-			fmt.Printf("Sending debug request...\n")
-			response, err := client.SendDebugRequest(ctx, debugReq)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Debug request failed: %v\n", err)
-				os.Exit(1)
-			}
-
-			fmt.Printf("✅ Debug request successful!\n")
-			fmt.Printf("Response: %s\n", response)
 		},
 	})
 
@@ -746,7 +678,19 @@ func initConfig() {
 }
 
 // initializeSystem initializes the configuration manager and connector registry
-func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
+// ConnectorFactory represents a function that creates a connector
+type ConnectorFactory func() connectors.Connector
+
+// Available connector factories for lazy initialization
+var connectorFactories = map[string]ConnectorFactory{
+	"github":       func() connectors.Connector { return connectors.NewGitHubConnector() },
+	"calendar":     func() connectors.Connector { return connectors.NewCalendarConnector() },
+	"gitlab":       func() connectors.Connector { return connectors.NewGitLabConnector() },
+	"youtrack":     func() connectors.Connector { return connectors.NewYouTrackConnector() },
+	"macos_system": func() connectors.Connector { return connectors.NewMacOSSystemConnector() },
+}
+
+func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry, *config.PreferencesManager) {
 	// Initialize configuration
 	configManager := config.NewManager()
 	if err := configManager.Load(); err != nil {
@@ -754,40 +698,77 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 		os.Exit(1)
 	}
 
-	// Initialize connector registry
+	// Initialize preferences
+	prefsManager := config.NewPreferencesManager(configManager)
+	if err := prefsManager.Load(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading preferences: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize connector registry with lazy loading
 	registry := connectors.NewConnectorRegistry()
 
 	// Register available connectors
-	registry.Register(connectors.NewGitHubConnector())
-	registry.Register(connectors.NewCalendarConnector())
-	registry.Register(connectors.NewGitLabConnector())
-	registry.Register(connectors.NewYouTrackConnector())
-	registry.Register(connectors.NewMacOSSystemConnector())
+	for name, factory := range connectorFactories {
+		connector := factory()
+		registry.Register(connector)
 
-	return configManager, registry
+		// Apply basic configuration even for disabled connectors
+		baseConfig := map[string]interface{}{
+			connectors.CommonConfigKeys.LogLevel: configManager.GetConfig().App.LogLevel,
+		}
+
+		// Get connector config
+		connectorConfig, exists := configManager.GetConnectorConfig(name)
+		if exists {
+			// Add connector-specific config
+			for k, v := range connectorConfig.Config {
+				baseConfig[k] = v
+			}
+		}
+
+		// Only configure, but don't enable
+		_ = connector.Configure(baseConfig)
+	}
+
+	return configManager, registry, prefsManager
 }
 
 // getEnabledConnectors returns configured and enabled connectors
 func getEnabledConnectors(configManager *config.Manager, registry *connectors.ConnectorRegistry) map[string]connectors.Connector {
 	enabled := make(map[string]connectors.Connector)
+	appConfig := configManager.GetConfig()
 
 	for name, connector := range registry.List() {
 		if configManager.IsConnectorEnabled(name) {
+			// Prepare configuration with app-level defaults
+			configWithAppSettings := make(map[string]interface{})
+
+			// Get connector config
 			connectorConfig, exists := configManager.GetConnectorConfig(name)
 			if exists {
-				// Inject app log level into connector config
-				configWithLogLevel := make(map[string]interface{})
+				// First apply connector-specific config
 				for k, v := range connectorConfig.Config {
-					configWithLogLevel[k] = v
+					configWithAppSettings[k] = v
 				}
-				configWithLogLevel["log_level"] = configManager.GetConfig().App.LogLevel
-
-				if err := connector.Configure(configWithLogLevel); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: Error configuring %s connector: %v\n", name, err)
-					continue
-				}
-				enabled[name] = connector
 			}
+
+			// Add app-level settings as defaults
+			configWithAppSettings[connectors.CommonConfigKeys.LogLevel] = appConfig.App.LogLevel
+			configWithAppSettings[connectors.CommonConfigKeys.DateFormat] = appConfig.App.DateFormat
+
+			// Add debug mode if environment variable is set
+			if os.Getenv("ARKEO_DEBUG") != "" {
+				configWithAppSettings[connectors.CommonConfigKeys.DebugMode] = true
+			}
+
+			if err := connector.Configure(configWithAppSettings); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Error configuring %s connector: %v\n", name, err)
+				continue
+			}
+
+			connector.SetEnabled(true)
+			enabled[name] = connector
 		}
 	}
 

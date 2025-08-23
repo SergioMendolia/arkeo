@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,7 +16,6 @@ import (
 // GitHubConnector implements the Connector interface for GitHub
 type GitHubConnector struct {
 	*BaseConnector
-	httpClient *http.Client
 }
 
 // NewGitHubConnector creates a new GitHub connector
@@ -24,15 +25,16 @@ func NewGitHubConnector() *GitHubConnector {
 			"github",
 			"Fetches git commits and GitHub activities",
 		),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
 }
 
+// getHTTPClient returns a pooled HTTP client for GitHub API requests
+// GetHTTPClient is now used directly from BaseConnector
+
 // GetRequiredConfig returns the required configuration for GitHub
 func (g *GitHubConnector) GetRequiredConfig() []ConfigField {
-	return []ConfigField{
+	// Define GitHub-specific required fields
+	requiredFields := []ConfigField{
 		{
 			Key:         "token",
 			Type:        "secret",
@@ -50,21 +52,20 @@ func (g *GitHubConnector) GetRequiredConfig() []ConfigField {
 			Type:        "bool",
 			Required:    false,
 			Description: "Include private repositories",
-			Default:     "false",
+			Default:     false,
 		},
 	}
+
+	// Merge with common fields
+	return MergeConfigFields(requiredFields)
 }
 
 // ValidateConfig validates the GitHub configuration
+// Uses the common validation helper to check required fields
 func (g *GitHubConnector) ValidateConfig(config map[string]interface{}) error {
-	token, ok := config["token"].(string)
-	if !ok || token == "" {
-		return fmt.Errorf("github token is required")
-	}
-
-	username, ok := config["username"].(string)
-	if !ok || username == "" {
-		return fmt.Errorf("github username is required")
+	// Use the common validation helper that checks all required fields
+	if err := ValidateConfigFields(config, g.GetRequiredConfig()); err != nil {
+		return err
 	}
 
 	return nil
@@ -77,22 +78,27 @@ func (g *GitHubConnector) TestConnection(ctx context.Context) error {
 		return fmt.Errorf("no token configured")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
+	// Use timeout from configuration
+	timeout := g.GetConfigInt(CommonConfigKeys.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	req, err := g.CreateBearerRequest(ctx, "GET", "https://api.github.com/user", token)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := g.GetHTTPClient().Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("github API returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GitHub API returned error: %s, status: %d", string(body), resp.StatusCode)
 	}
 
 	return nil
@@ -102,6 +108,16 @@ func (g *GitHubConnector) TestConnection(ctx context.Context) error {
 func (g *GitHubConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
 	var activities []timeline.Activity
 
+	// Use timeout from configuration
+	timeout := g.GetConfigInt(CommonConfigKeys.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	// Enable debug logging if configured
+	if g.IsDebugMode() {
+		log.Printf("GitHub Debug: Fetching activities for date %s", date.Format("2006-01-02"))
+	}
+
 	// Get commits
 	commits, err := g.getCommits(ctx, date)
 	if err != nil {
@@ -110,11 +126,20 @@ func (g *GitHubConnector) GetActivities(ctx context.Context, date time.Time) ([]
 	activities = append(activities, commits...)
 
 	// Get issues and PRs
-	issues, err := g.getIssuesAndPRs(ctx, date)
+	issuesAndPRs, err := g.getIssuesAndPRs(ctx, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get issues and PRs: %w", err)
 	}
-	activities = append(activities, issues...)
+	activities = append(activities, issuesAndPRs...)
+
+	// Limit the number of returned activities if max_items is set
+	maxItems := g.GetConfigInt(CommonConfigKeys.MaxItems)
+	if maxItems > 0 && len(activities) > maxItems {
+		if g.IsDebugMode() {
+			log.Printf("GitHub Debug: Limiting activities from %d to %d", len(activities), maxItems)
+		}
+		activities = activities[:maxItems]
+	}
 
 	return activities, nil
 }
@@ -131,15 +156,14 @@ func (g *GitHubConnector) getCommits(ctx context.Context, date time.Time) ([]tim
 	url := fmt.Sprintf("https://api.github.com/search/commits?q=committer:%s+author-date:%s..%s&sort=author-date&order=desc",
 		username, since, until)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := g.CreateBearerRequest(ctx, "GET", url, token)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github.cloak-preview")
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := g.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -218,15 +242,14 @@ func (g *GitHubConnector) getIssuesAndPRs(ctx context.Context, date time.Time) (
 	for _, query := range queries {
 		url := fmt.Sprintf("https://api.github.com/search/issues?q=%s&sort=updated&order=desc&per_page=100", query)
 
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := g.CreateBearerRequest(ctx, "GET", url, token)
 		if err != nil {
 			continue
 		}
 
-		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-		resp, err := g.httpClient.Do(req)
+		resp, err := g.GetHTTPClient().Do(req)
 		if err != nil {
 			continue
 		}

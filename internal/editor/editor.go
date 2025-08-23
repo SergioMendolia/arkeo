@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -40,36 +39,4 @@ func getEditor() string {
 		// Linux and other Unix-like systems
 		return "nano"
 	}
-}
-
-// GetAvailableEditors returns a list of commonly available editors
-func GetAvailableEditors() []string {
-	editors := []string{"nano", "vim", "vi", "emacs", "code", "subl", "atom"}
-
-	if runtime.GOOS == "windows" {
-		editors = append(editors, "notepad", "notepad++")
-	}
-
-	if runtime.GOOS == "darwin" {
-		editors = append(editors, "TextEdit")
-	}
-
-	var available []string
-	for _, editor := range editors {
-		if _, err := exec.LookPath(editor); err == nil {
-			available = append(available, editor)
-		}
-	}
-
-	return available
-}
-
-// SetEditor sets the EDITOR environment variable
-func SetEditor(editor string) error {
-	// Verify the editor exists
-	if _, err := exec.LookPath(editor); err != nil {
-		return fmt.Errorf("editor '%s' not found in PATH", editor)
-	}
-
-	return os.Setenv("EDITOR", editor)
 }
