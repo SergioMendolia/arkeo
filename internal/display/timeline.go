@@ -24,7 +24,7 @@ func DefaultTimelineOptions() TimelineOptions {
 		ShowTimestamps: true,
 		GroupByHour:    false,
 		MaxItems:       500,
-		Format:         "table",
+		Format:         "visual",
 	}
 }
 
@@ -143,7 +143,7 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 // displayJSON outputs timeline as JSON
 func displayJSON(tl *timeline.Timeline, activities []timeline.Activity) error {
 	// Note: In a full implementation, you'd use json.MarshalIndent here
-	fmt.Printf("JSON output not fully implemented. Use --format=table instead.\n")
+	fmt.Printf("JSON output not fully implemented. Use --format=visual instead.\n")
 	return nil
 }
 

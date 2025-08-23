@@ -244,14 +244,24 @@ func TestBaseConnector_Configure(t *testing.T) {
 	}
 
 	retrievedConfig := connector.GetConfig()
-	if len(retrievedConfig) != len(config) {
-		t.Errorf("Expected %d config items, got %d", len(config), len(retrievedConfig))
-	}
+	// The BaseConnector now includes common configuration fields from CommonConfigFields(),
+	// so the actual config will have more items than just what we provided.
+	// Instead of checking the total count, we should verify our provided values are present.
 
+	// Verify that our provided config values are correctly stored
 	for key, value := range config {
 		if retrievedConfig[key] != value {
 			t.Errorf("Config key %s: expected %v, got %v", key, value, retrievedConfig[key])
 		}
+	}
+
+	// Verify a few common config fields are present with default values
+	if _, exists := retrievedConfig[CommonConfigKeys.LogLevel]; !exists {
+		t.Error("Common config field log_level should be present")
+	}
+
+	if _, exists := retrievedConfig[CommonConfigKeys.Timeout]; !exists {
+		t.Error("Common config field timeout should be present")
 	}
 }
 

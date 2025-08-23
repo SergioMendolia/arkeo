@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
-	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // CalendarConnector implements the Connector interface for Google Calendar using iCal feeds
@@ -29,14 +28,11 @@ func NewCalendarConnector() *CalendarConnector {
 	}
 }
 
-// getHTTPClient returns a pooled HTTP client for calendar requests
-func (c *CalendarConnector) getHTTPClient() *http.Client {
-	return utils.GetDefaultHTTPClient()
-}
+// GetHTTPClient is now used directly from BaseConnector
 
 // GetRequiredConfig returns the required configuration for calendar
 func (c *CalendarConnector) GetRequiredConfig() []ConfigField {
-	return []ConfigField{
+	requiredFields := []ConfigField{
 		{
 			Key:         "ical_urls",
 			Type:        "string",
@@ -48,17 +44,23 @@ func (c *CalendarConnector) GetRequiredConfig() []ConfigField {
 			Type:        "bool",
 			Required:    false,
 			Description: "Include declined events",
-			Default:     "false",
+			Default:     false,
 		},
 	}
+
+	// Merge with common fields
+	return MergeConfigFields(requiredFields)
 }
 
 // ValidateConfig validates the calendar configuration
 func (c *CalendarConnector) ValidateConfig(config map[string]interface{}) error {
-	icalURLs, ok := config["ical_urls"].(string)
-	if !ok || icalURLs == "" {
-		return fmt.Errorf("ical_urls is required")
+	// First use the common validation helper that checks all required fields
+	if err := ValidateConfigFields(config, c.GetRequiredConfig()); err != nil {
+		return err
 	}
+
+	// Additional calendar-specific validation
+	icalURLs := config["ical_urls"].(string)
 
 	// Validate that URLs look like Google Calendar iCal URLs
 	urls := c.parseICalURLs(icalURLs)
@@ -73,12 +75,7 @@ func (c *CalendarConnector) ValidateConfig(config map[string]interface{}) error 
 
 // isDebugMode checks if debug logging is enabled
 func (c *CalendarConnector) isDebugMode() bool {
-	// Check if log_level in config is set to debug
-	if logLevel, ok := c.config["log_level"].(string); ok {
-		return strings.ToLower(logLevel) == "debug"
-	}
-	// Also check environment variables
-	return strings.ToLower(strings.TrimSpace(c.GetConfigString("log_level"))) == "debug"
+	return c.BaseConnector.IsDebugMode()
 }
 
 // TestConnection tests the calendar connection
@@ -116,6 +113,14 @@ func (c *CalendarConnector) GetActivities(ctx context.Context, date time.Time) (
 	urls := c.parseICalURLs(c.GetConfigString("ical_urls"))
 	var allActivities []timeline.Activity
 	seenEventUIDs := make(map[string]bool) // Track seen event UIDs to prevent duplicates
+
+	// Use timeout from configuration
+	timeout := c.GetConfigInt(CommonConfigKeys.Timeout)
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+		defer cancel()
+	}
 
 	if c.isDebugMode() {
 		log.Printf("Calendar Debug: Fetching events for date %s from %d calendar(s)", date.Format("2006-01-02"), len(urls))
@@ -216,12 +221,12 @@ func (c *CalendarConnector) testICalURL(ctx context.Context, url string) error {
 		log.Printf("Calendar Debug: Making HTTP request to %s", c.maskURL(url))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := c.CreateRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
 
-	resp, err := c.getHTTPClient().Do(req)
+	resp, err := c.GetHTTPClient().Do(req)
 	if err != nil {
 		return err
 	}
@@ -258,12 +263,12 @@ func (c *CalendarConnector) fetchCalendarEvents(ctx context.Context, url string,
 		log.Printf("Calendar Debug: Fetching calendar data from %s", c.maskURL(url))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := c.CreateRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.getHTTPClient().Do(req)
+	resp, err := c.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
-	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // GitLabConnector implements the Connector interface for GitLab
@@ -86,10 +85,7 @@ func NewGitLabConnector() *GitLabConnector {
 	}
 }
 
-// getHTTPClient returns a pooled HTTP client for GitLab API requests
-func (g *GitLabConnector) getHTTPClient() *http.Client {
-	return utils.GetDefaultHTTPClient()
-}
+// GetHTTPClient is now used directly from BaseConnector
 
 // stripHTMLTags removes HTML tags from a string
 func (g *GitLabConnector) stripHTMLTags(input string) string {
@@ -107,11 +103,7 @@ func (g *GitLabConnector) stripHTMLTags(input string) string {
 
 // isDebugMode checks if debug logging is enabled
 func (g *GitLabConnector) isDebugMode() bool {
-	// Check if log_level in config is set to debug
-	if logLevel, ok := g.config["log_level"].(string); ok {
-		return strings.ToLower(logLevel) == "debug"
-	}
-	return false
+	return g.BaseConnector.IsDebugMode()
 }
 
 // GetRequiredConfig returns the required configuration for GitLab
@@ -190,7 +182,7 @@ func (g *GitLabConnector) TestConnection(ctx context.Context) error {
 	}
 
 	// Create request
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := g.CreateRequest(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -200,7 +192,7 @@ func (g *GitLabConnector) TestConnection(ctx context.Context) error {
 	req.Header.Set("Accept", "application/json")
 
 	// Send request
-	resp, err := g.getHTTPClient().Do(req)
+	resp, err := g.GetHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch GitLab events: %w", err)
 	}
@@ -304,7 +296,7 @@ func (g *GitLabConnector) getEvents(ctx context.Context, gitlabURL, accessToken 
 			log.Printf("GitLab Debug: Fetching page %d from %s", page, apiURL)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		req, err := g.CreateRequest(ctx, "GET", apiURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request for page %d: %w", page, err)
 		}
@@ -312,7 +304,7 @@ func (g *GitLabConnector) getEvents(ctx context.Context, gitlabURL, accessToken 
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 		req.Header.Set("Accept", "application/json")
 
-		resp, err := g.getHTTPClient().Do(req)
+		resp, err := g.GetHTTPClient().Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch events page %d: %w", page, err)
 		}

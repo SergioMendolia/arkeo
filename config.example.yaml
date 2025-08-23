@@ -10,37 +10,37 @@ app:
   # Set to "debug" to enable detailed logging for connectors
   log_level: "info"
 
-# LLM configuration for AI timeline analysis
-llm:
-  # Base URL for OpenAI-compatible API
-  # Examples:
-  #   OpenAI: https://api.openai.com/v1
-  #   Local Ollama: http://localhost:11434/v1
-  #   Azure OpenAI: https://your-resource.openai.azure.com/openai/deployments/your-deployment
-  base_url: "https://api.openai.com/v1"
 
-  # API key for authentication
-  # For OpenAI: Get from https://platform.openai.com/api-keys
-  # For local models: Usually not needed or can be any value
-  api_key: "your-api-key-here"
 
-  # Model name to use for analysis
-  # OpenAI: gpt-3.5-turbo, gpt-4, gpt-4-turbo
-  # Local: depends on your setup (e.g., llama2, mistral)
-  model: "gpt-3.5-turbo"
+# User preferences configuration
+# These settings control the application's behavior and appearance
+preferences:
+  # Display preferences
+  # Control how timeline information is presented
+  use_colors: true          # Use colors in terminal output
+  show_details: false       # Show detailed information for activities
+  show_progress: true       # Show progress bars during data fetching
+  show_gaps: true           # Highlight time gaps in the timeline
+  default_format: "visual"  # Default output format (visual, table, json, csv)
 
-  # Maximum tokens in response (adjust based on your needs)
-  max_tokens: 1000
+  # Timeline preferences
+  # Control how timeline data is organized and displayed
+  group_by_hour: false          # Group activities by hour
+  max_items: 500                # Maximum number of items to display
+  show_timeline: false          # Show visual timeline markers
+  show_timestamps: true         # Show timestamps for each activity
 
-  # Temperature for response creativity (0.0 = deterministic, 2.0 = very creative)
-  temperature: 0.7
+  # Behavior preferences
+  # Control application behavior and defaults
 
-  # Default prompt for timeline analysis (can be overridden with --prompt flag)
-  default_prompt: "Please analyze this daily timeline and provide insights about productivity, focus areas, and any patterns you notice. Also suggest areas for improvement."
 
-  # Skip TLS certificate verification (useful for local development or self-signed certificates)
-  # WARNING: Only enable this for trusted local environments. Never use in production with untrusted endpoints.
-  skip_tls_verify: false
+
+  # Performance preferences
+  # Control application performance characteristics
+  parallel_fetch: true          # Fetch data from connectors in parallel
+  fetch_timeout: 30             # Connector timeout in seconds
+
+
 
 # Connector configurations
 connectors:

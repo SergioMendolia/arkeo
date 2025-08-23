@@ -30,8 +30,8 @@ func TestDefaultTimelineOptions(t *testing.T) {
 		t.Errorf("Expected MaxItems to be 500, got %d", opts.MaxItems)
 	}
 
-	if opts.Format != "table" {
-		t.Errorf("Expected Format to be 'table', got %s", opts.Format)
+	if opts.Format != "visual" {
+		t.Errorf("Expected Format to be 'visual', got %s", opts.Format)
 	}
 }
 
@@ -232,7 +232,7 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 	})
 
 	// JSON output is not fully implemented, should show message
-	expected := "JSON output not fully implemented. Use --format=table instead."
+	expected := "JSON output not fully implemented. Use --format=visual instead."
 	if !strings.Contains(output, expected) {
 		t.Errorf("Expected JSON not implemented message, got: %s", output)
 	}

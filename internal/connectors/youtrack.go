@@ -8,13 +8,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
-	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // YouTrackConnector implements the Connector interface for YouTrack
@@ -32,10 +30,7 @@ func NewYouTrackConnector() *YouTrackConnector {
 	}
 }
 
-// getHTTPClient returns a pooled HTTP client for YouTrack API requests
-func (y *YouTrackConnector) getHTTPClient() *http.Client {
-	return utils.GetDefaultHTTPClient()
-}
+// GetHTTPClient is now used directly from BaseConnector
 
 // GetRequiredConfig returns the required configuration for YouTrack
 func (y *YouTrackConnector) GetRequiredConfig() []ConfigField {
@@ -98,27 +93,8 @@ func (y *YouTrackConnector) GetRequiredConfig() []ConfigField {
 
 // isDebugMode checks if debug logging is enabled
 func (y *YouTrackConnector) isDebugMode() bool {
-	// Check if log_level in config is set to debug
-	if logLevel, ok := y.config["log_level"].(string); ok {
-		if strings.ToLower(logLevel) == "debug" {
-			return true
-		}
-	}
-
-	// Check environment variables
-	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
-		if strings.ToLower(strings.TrimSpace(logLevel)) == "debug" {
-			return true
-		}
-	}
-
-	// Check ARKEO_DEBUG environment variable
-	if debug := os.Getenv("ARKEO_DEBUG"); debug != "" {
-		return strings.ToLower(strings.TrimSpace(debug)) == "1" ||
-			strings.ToLower(strings.TrimSpace(debug)) == "true"
-	}
-
-	return false
+	// Use the base connector implementation
+	return y.BaseConnector.IsDebugMode()
 }
 
 // IsDebugMode provides public access to debug mode status
@@ -218,15 +194,13 @@ func (y *YouTrackConnector) testAPIEndpoint(ctx context.Context, apiURL, token, 
 		log.Printf("YouTrack Debug: Testing %s endpoint: %s", endpointName, apiURL)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := y.CreateBearerRequest(ctx, "GET", apiURL, token)
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s: %w", endpointName, err)
 	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.getHTTPClient().Do(req)
+	resp, err := y.GetHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to YouTrack %s: %w", endpointName, err)
 	}
@@ -369,15 +343,13 @@ func (y *YouTrackConnector) getCurrentUser(ctx context.Context) (*youTrackUser, 
 	if y.isDebugMode() {
 		log.Printf("YouTrack Debug: Fetching current user from %s", apiURL)
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := y.CreateBearerRequest(ctx, "GET", apiURL, token)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request for current user: %w", err)
 	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.getHTTPClient().Do(req)
+	resp, err := y.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -496,15 +468,13 @@ func (y *YouTrackConnector) getActivities(ctx context.Context, date time.Time, u
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := y.CreateBearerRequest(ctx, "GET", apiURL, token)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := y.getHTTPClient().Do(req)
+	resp, err := y.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
