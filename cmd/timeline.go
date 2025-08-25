@@ -24,16 +24,7 @@ Activities are fetched from all enabled connectors and displayed in chronologica
 }
 
 func init() {
-	// Timeline flags
-	timelineCmd.Flags().BoolVar(&showDetail, "details", false, "show detailed information for each activity")
-	timelineCmd.Flags().IntVar(&maxItems, "max", 500, "maximum number of activities to show")
-	timelineCmd.Flags().BoolVar(&groupByHour, "group", false, "group activities by hour")
-
-	// Enhanced timeline flags
-	timelineCmd.Flags().BoolVar(&useColors, "colors", true, "use colors in output")
-	timelineCmd.Flags().BoolVar(&showTimeline, "visual", true, "show visual timeline view")
-	timelineCmd.Flags().BoolVar(&showProgress, "progress", true, "show progress indicators")
-	timelineCmd.Flags().BoolVar(&showGaps, "gaps", true, "highlight time gaps")
+	// No timeline-specific flags - all settings are now configured via config file
 }
 
 func runTimelineCommand(cmd *cobra.Command, args []string) {
@@ -51,6 +42,8 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 	// Initialize configuration and connectors
 	configManager, registry := initializeSystem()
+	config := configManager.GetConfig()
+	preferences := config.Preferences
 
 	// Create timeline
 	tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
@@ -69,8 +62,8 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 	// Initialize progress tracker if enabled
 	var progress *ui.ConnectorProgress
-	if showProgress {
-		progress = ui.NewConnectorProgress(useColors)
+	if preferences.ShowProgress {
+		progress = ui.NewConnectorProgress(preferences.UseColors)
 	}
 
 	// Convert connectors to utils.Connector interface and start progress tracking
@@ -82,23 +75,64 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Align progress bars after all connectors are added
+	if progress != nil {
+		progress.AlignProgressBars()
+	}
+
 	// Fetch activities from all connectors with progress tracking
 	var activities []timeline.Activity
-	if progress != nil {
-		activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
-		for name := range enabledConnectors {
-			// Simulate progress completion
-			connectorActivities := 0
-			for _, activity := range activities {
-				if activity.Source == name {
-					connectorActivities++
+	if preferences.ParallelFetch {
+		if progress != nil {
+			// Use the new progress callback system
+			activities = utils.FetchActivitiesParallelWithProgress(ctx, utilsConnectors, targetDate,
+				func(connectorName, status string, current, total int, err error) {
+					if status == "connecting" {
+						// Already started in progress.StartConnector above
+					} else if status == "completed" {
+						if err == nil {
+							// Just update the progress bar to completion, don't finish yet
+							progress.UpdateConnector(connectorName, "", 1, 1)
+						} else {
+							progress.FinishConnector(connectorName, 0, err)
+						}
+					} else if status == "failed" {
+						progress.FinishConnector(connectorName, 0, err)
+					}
+				})
+
+			// Update final counts for all connectors
+			for name := range enabledConnectors {
+				connectorActivities := 0
+				for _, activity := range activities {
+					if activity.Source == name {
+						connectorActivities++
+					}
+				}
+				// Finish with the correct count if not already finished
+				if !progress.IsConnectorFinished(name) {
+					progress.FinishConnector(name, connectorActivities, nil)
 				}
 			}
-			progress.FinishConnector(name, connectorActivities, nil)
+			progress.PrintSummary()
+		} else {
+			activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
 		}
-		progress.PrintSummary()
 	} else {
-		activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
+		// Sequential fetch (fallback if parallel is disabled)
+		activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, false)
+		if progress != nil {
+			for name := range enabledConnectors {
+				connectorActivities := 0
+				for _, activity := range activities {
+					if activity.Source == name {
+						connectorActivities++
+					}
+				}
+				progress.FinishConnector(name, connectorActivities, nil)
+			}
+			progress.PrintSummary()
+		}
 	}
 
 	tl.AddActivitiesUnsorted(activities)
@@ -109,16 +143,14 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 	// Use enhanced display
 	enhancedOpts := display.EnhancedTimelineOptions{
 		TimelineOptions: display.TimelineOptions{
-			ShowDetails:    showDetail,
-			ShowTimestamps: true,
-			GroupByHour:    groupByHour,
-			MaxItems:       maxItems,
-			Format:         format,
+			ShowDetails: preferences.ShowDetails,
+			GroupByHour: preferences.GroupByHour,
+			MaxItems:    preferences.MaxItems,
+			Format:      preferences.DefaultFormat,
 		},
-		UseColors:    useColors,
-		ShowTimeline: showTimeline,
-		ShowProgress: showProgress,
-		ShowGaps:     showGaps,
+		UseColors:    preferences.UseColors,
+		ShowProgress: preferences.ShowProgress,
+		ShowGaps:     preferences.ShowGaps,
 	}
 
 	if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {

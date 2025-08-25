@@ -11,18 +11,8 @@ import (
 )
 
 var (
-	configPath  string
-	date        string
-	format      string
-	showDetail  bool
-	maxItems    int
-	groupByHour bool
-
-	// Enhanced timeline flags
-	useColors    bool
-	showTimeline bool
-	showProgress bool
-	showGaps     bool
+	configPath string
+	date       string
 )
 
 var version = "dev" // Will be set by SetVersion function
@@ -79,7 +69,6 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default is $HOME/.config/arkeo/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&date, "date", "", "date for operations (default is today, format: YYYY-MM-DD)")
-	rootCmd.PersistentFlags().StringVar(&format, "format", "visual", "output format (table, json, csv, visual)")
 
 	// Add subcommands
 	rootCmd.AddCommand(timelineCmd)
@@ -128,6 +117,7 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 		connectors.NewGitLabConnector(),
 		connectors.NewYouTrackConnector(),
 		connectors.NewMacOSSystemConnector(),
+		connectors.NewWebhooksConnector(),
 	}
 
 	for _, connector := range availableConnectors {
@@ -175,6 +165,7 @@ func getEnabledConnectors(configManager *config.Manager, registry *connectors.Co
 			// Add app-level settings as defaults
 			configWithAppSettings[connectors.CommonConfigKeys.LogLevel] = appConfig.App.LogLevel
 			configWithAppSettings[connectors.CommonConfigKeys.DateFormat] = appConfig.App.DateFormat
+			configWithAppSettings[connectors.CommonConfigKeys.Timeout] = appConfig.Preferences.FetchTimeout
 
 			// Add debug mode if environment variable is set
 			if os.Getenv("ARKEO_DEBUG") != "" {

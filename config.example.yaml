@@ -20,14 +20,12 @@ preferences:
   show_details: false       # Show detailed information for activities
   show_progress: true       # Show progress bars during data fetching
   show_gaps: true           # Highlight time gaps in the timeline
-  default_format: "visual"  # Default output format (visual, table, json, csv)
+  default_format: "table"   # Default output format (table, json, csv)
 
   # Timeline preferences
   # Control how timeline data is organized and displayed
   group_by_hour: false          # Group activities by hour
   max_items: 500                # Maximum number of items to display
-  show_timeline: false          # Show visual timeline markers
-  show_timestamps: true         # Show timestamps for each activity
 
   # Performance preferences
   # Control application performance characteristics
@@ -102,4 +100,22 @@ connectors:
       # When the screen is locked, it generates "Computer is idle" activities.
       # When the screen is unlocked, it generates "Computer is active" activities.
       # No additional configuration is required beyond enabling the connector.
+
+  # Webhooks connector - fetches activities from HTTP webhook endpoints
+  webhooks:
+    enabled: false
+    config:
+      # Array of webhook configurations
+      # Each webhook will be called with ?date=YYYY-MM-DD parameter
+      # Expected response: JSON array of activity objects
+      webhooks:
+        - name: "My Service"                              # Display name for activities
+          url: "https://api.myservice.com/activities"     # Webhook endpoint URL
+          token: "your-bearer-token-here"                # Bearer token for authentication
+          skip_tls_verification: false                   # Skip TLS certificate verification (default: false)
+        # Add more webhooks as needed:
+        # - name: "Another Service"
+        #   url: "https://api.another.com/events"
+        #   token: "another-token"
+        #   skip_tls_verification: true                  # Useful for self-signed certificates
 

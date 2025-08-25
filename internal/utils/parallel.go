@@ -45,8 +45,16 @@ func NewParallelExecutorWithConfig(maxConcurrency int, timeout time.Duration) *P
 	}
 }
 
+// ProgressCallback is called when a connector starts, updates, or completes
+type ProgressCallback func(connectorName, status string, current, total int, err error)
+
 // FetchActivitiesParallel fetches activities from multiple connectors in parallel
 func (pe *ParallelExecutor) FetchActivitiesParallel(ctx context.Context, connectorMap map[string]Connector, date time.Time) []ConnectorResult {
+	return pe.FetchActivitiesParallelWithProgress(ctx, connectorMap, date, nil)
+}
+
+// FetchActivitiesParallelWithProgress fetches activities from multiple connectors in parallel with progress tracking
+func (pe *ParallelExecutor) FetchActivitiesParallelWithProgress(ctx context.Context, connectorMap map[string]Connector, date time.Time, progressCallback ProgressCallback) []ConnectorResult {
 	// Channel to control concurrency
 	semaphore := make(chan struct{}, pe.maxConcurrency)
 
@@ -65,6 +73,11 @@ func (pe *ParallelExecutor) FetchActivitiesParallel(ctx context.Context, connect
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
+			// Notify start
+			if progressCallback != nil {
+				progressCallback(connectorName, "connecting", 0, 1, nil)
+			}
+
 			// Create timeout context for this connector
 			connectorCtx, cancel := context.WithTimeout(ctx, pe.timeout)
 			defer cancel()
@@ -73,12 +86,23 @@ func (pe *ParallelExecutor) FetchActivitiesParallel(ctx context.Context, connect
 			activities, err := conn.GetActivities(connectorCtx, date)
 			duration := time.Since(start)
 
-			results <- ConnectorResult{
+			result := ConnectorResult{
 				Name:       connectorName,
 				Activities: activities,
 				Error:      err,
 				Duration:   duration,
 			}
+
+			// Notify completion
+			if progressCallback != nil {
+				status := "completed"
+				if err != nil {
+					status = "failed"
+				}
+				progressCallback(connectorName, status, 1, 1, err)
+			}
+
+			results <- result
 		}(name, connector)
 	}
 
@@ -223,6 +247,23 @@ var DefaultParallelExecutor = NewParallelExecutor()
 // FetchActivitiesParallel is a convenience function that uses the default parallel executor
 func FetchActivitiesParallel(ctx context.Context, connectorMap map[string]Connector, date time.Time, verbose bool) []timeline.Activity {
 	return DefaultParallelExecutor.FetchAndCombineActivities(ctx, connectorMap, date, verbose)
+}
+
+// FetchActivitiesParallelWithProgress is a convenience function that uses the default executor with progress tracking
+func FetchActivitiesParallelWithProgress(ctx context.Context, connectorMap map[string]Connector, date time.Time, progressCallback ProgressCallback) []timeline.Activity {
+	results := DefaultParallelExecutor.FetchActivitiesParallelWithProgress(ctx, connectorMap, date, progressCallback)
+
+	// Pre-allocate with estimated capacity
+	totalActivities := make([]timeline.Activity, 0, len(results)*10)
+
+	for _, result := range results {
+		if result.Error != nil {
+			continue // Progress callback already handled error reporting
+		}
+		totalActivities = append(totalActivities, result.Activities...)
+	}
+
+	return totalActivities
 }
 
 // FetchActivitiesWithStats is a convenience function that uses the default executor and returns stats

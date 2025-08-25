@@ -1,6 +1,7 @@
 package display
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,21 +11,19 @@ import (
 
 // TimelineOptions controls how the timeline is displayed
 type TimelineOptions struct {
-	ShowDetails    bool
-	ShowTimestamps bool
-	GroupByHour    bool
-	MaxItems       int
-	Format         string // "table", "json", "csv"
+	ShowDetails bool
+	GroupByHour bool
+	MaxItems    int
+	Format      string // "table", "json", "csv"
 }
 
 // DefaultTimelineOptions returns sensible defaults for timeline display
 func DefaultTimelineOptions() TimelineOptions {
 	return TimelineOptions{
-		ShowDetails:    false,
-		ShowTimestamps: true,
-		GroupByHour:    false,
-		MaxItems:       500,
-		Format:         "visual",
+		ShowDetails: false,
+		GroupByHour: false,
+		MaxItems:    500,
+		Format:      "table",
 	}
 }
 
@@ -109,19 +108,18 @@ func displayChronological(activities []timeline.Activity, opts TimelineOptions) 
 // displayActivity shows a single activity
 func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix string) {
 
-	// Basic info line
-	if opts.ShowTimestamps {
-		fmt.Printf("%s%s [%s] %s\n",
-			prefix,
-			activity.Timestamp.Format("15:04"),
-			activity.Source,
-			activity.Title)
-	} else {
-		fmt.Printf("%s [%s] %s\n",
-			prefix,
-			activity.Source,
-			activity.Title)
+	// Build title with duration if available
+	title := activity.Title
+	if activity.Duration != nil {
+		title = fmt.Sprintf("%s (%s)", activity.Title, activity.FormatDuration())
 	}
+
+	// Basic info line with timestamps (always shown)
+	fmt.Printf("%s%s [\033[90m%s\033[0m] %s\n",
+		prefix,
+		activity.Timestamp.Format("15:04"),
+		activity.Source,
+		title)
 
 	// Show description if available and details requested
 	if opts.ShowDetails && activity.Description != "" {
@@ -142,8 +140,18 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 
 // displayJSON outputs timeline as JSON
 func displayJSON(tl *timeline.Timeline, activities []timeline.Activity) error {
-	// Note: In a full implementation, you'd use json.MarshalIndent here
-	fmt.Printf("JSON output not fully implemented. Use --format=visual instead.\n")
+	// Create a timeline copy with the limited activities
+	output := &timeline.Timeline{
+		Date:       tl.Date,
+		Activities: activities,
+	}
+	
+	jsonData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal timeline to JSON: %v", err)
+	}
+	
+	fmt.Print(string(jsonData))
 	return nil
 }
 

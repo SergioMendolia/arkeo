@@ -11,16 +11,17 @@ import (
 
 // ANSI color codes
 const (
-	Reset   = "\033[0m"
-	Bold    = "\033[1m"
-	Red     = "\033[31m"
-	Green   = "\033[32m"
-	Yellow  = "\033[33m"
-	Blue    = "\033[34m"
-	Magenta = "\033[35m"
-	Cyan    = "\033[36m"
-	Gray    = "\033[37m"
-	White   = "\033[97m"
+	Reset    = "\033[0m"
+	Bold     = "\033[1m"
+	Red      = "\033[31m"
+	Green    = "\033[32m"
+	Yellow   = "\033[33m"
+	Blue     = "\033[34m"
+	Magenta  = "\033[35m"
+	Cyan     = "\033[36m"
+	Gray     = "\033[37m"
+	DarkGray = "\033[90m"
+	White    = "\033[97m"
 )
 
 // Color mapping for different activity types and sources
@@ -54,7 +55,6 @@ var sourceLabels = map[string]string{
 type EnhancedTimelineOptions struct {
 	TimelineOptions
 	UseColors    bool
-	ShowTimeline bool // ASCII timeline view
 	ShowProgress bool // Progress indicators
 	ShowGaps     bool // Highlight time gaps
 }
@@ -64,7 +64,6 @@ func DefaultEnhancedOptions() EnhancedTimelineOptions {
 	return EnhancedTimelineOptions{
 		TimelineOptions: DefaultTimelineOptions(),
 		UseColors:       true,
-		ShowTimeline:    false,
 		ShowProgress:    true,
 		ShowGaps:        true,
 	}
@@ -87,10 +86,6 @@ func DisplayEnhancedTimeline(tl *timeline.Timeline, opts EnhancedTimelineOptions
 
 	// Display timeline based on format
 	switch opts.Format {
-	case "visual":
-		return displayVisualTimeline(activities, opts)
-	case "compact":
-		return displayEnhancedCompactMode(activities, opts)
 	default:
 		if opts.GroupByHour {
 			return displayEnhancedGroupedByHour(activities, opts)
@@ -127,7 +122,7 @@ func displayEnhancedChronological(activities []timeline.Activity, opts EnhancedT
 		// Show time gaps
 		if opts.ShowGaps && i > 0 {
 			gap := activity.Timestamp.Sub(lastTime)
-			if gap > 2*time.Hour {
+			if gap > 1*time.Hour {
 				displayTimeGap(gap, opts)
 			}
 		}
@@ -140,42 +135,6 @@ func displayEnhancedChronological(activities []timeline.Activity, opts EnhancedT
 }
 
 // displayEnhancedGroupedByHour groups activities by hour with visual enhancements
-// displayEnhancedCompactMode displays activities in a compact chronological format
-func displayEnhancedCompactMode(activities []timeline.Activity, opts EnhancedTimelineOptions) error {
-	if len(activities) == 0 {
-		fmt.Println("No activities found for the selected time period.")
-		return nil
-	}
-
-	// Sort activities by time
-	sort.Slice(activities, func(i, j int) bool {
-		return activities[i].Timestamp.Before(activities[j].Timestamp)
-	})
-
-	// Display each activity in compact form
-	for _, activity := range activities {
-		prefix := ""
-		label := sourceLabels[activity.Source]
-		if label == "" {
-			label = "SRC"
-		}
-
-		// Time and connector
-		timeStr := activity.Timestamp.Format("15:04")
-		sourceStr := fmt.Sprintf("%s:", activity.Source)
-
-		// Compact format
-		fmt.Printf("%s%s %s %s %s\n",
-			prefix,
-			colorize(timeStr, Green, opts.UseColors),
-			label,
-			colorize(sourceStr, Gray, opts.UseColors),
-			colorize(activity.Title, getActivityColor(activity), opts.UseColors))
-	}
-
-	return nil
-}
-
 func displayEnhancedGroupedByHour(activities []timeline.Activity, opts EnhancedTimelineOptions) error {
 	groups := make(map[string][]timeline.Activity)
 
@@ -210,72 +169,6 @@ func displayEnhancedGroupedByHour(activities []timeline.Activity, opts EnhancedT
 	return nil
 }
 
-// displayVisualTimeline shows a visual ASCII timeline
-func displayVisualTimeline(activities []timeline.Activity, opts EnhancedTimelineOptions) error {
-	if len(activities) == 0 {
-		return nil
-	}
-
-	fmt.Printf("Visual Timeline:\n")
-	fmt.Println(colorize(strings.Repeat("═", 60), Gray, opts.UseColors))
-
-	// Create time slots (every 30 minutes)
-	startTime := activities[0].Timestamp.Truncate(30 * time.Minute)
-	endTime := activities[len(activities)-1].Timestamp.Add(30 * time.Minute).Truncate(30 * time.Minute)
-
-	current := startTime
-	for current.Before(endTime) {
-		timeStr := current.Format("15:04")
-
-		// Find activities in this 30-minute window
-		var windowActivities []timeline.Activity
-		windowEnd := current.Add(30 * time.Minute)
-
-		for _, activity := range activities {
-			if activity.Timestamp.After(current) && activity.Timestamp.Before(windowEnd) {
-				windowActivities = append(windowActivities, activity)
-			}
-		}
-
-		// Display time slot
-		if len(windowActivities) == 0 {
-			fmt.Printf("%s %s\n",
-				colorize(timeStr, Gray, opts.UseColors),
-				colorize("│", Gray, opts.UseColors))
-		} else {
-			fmt.Printf("%s %s",
-				colorize(timeStr, Bold, opts.UseColors),
-				colorize("├─", Blue, opts.UseColors))
-
-			// Show activity indicators
-			for i, activity := range windowActivities {
-				label := sourceLabels[activity.Source]
-				if label == "" {
-					label = "●"
-				}
-
-				if i == 0 {
-					fmt.Printf("%s: %s %s",
-						activity.Timestamp.Format("15:04"),
-						label,
-						colorize(activity.Title, getActivityColor(activity), opts.UseColors))
-				} else {
-					fmt.Printf("\n%s %s %s: %s %s",
-						strings.Repeat(" ", 5),
-						colorize("└──", Blue, opts.UseColors),
-						activity.Timestamp.Format("15:04"),
-						label,
-						colorize(activity.Title, getActivityColor(activity), opts.UseColors))
-				}
-			}
-			fmt.Println()
-		}
-
-		current = current.Add(30 * time.Minute)
-	}
-
-	return nil
-}
 
 // displayEnhancedActivity shows a single activity with visual enhancements
 func displayEnhancedActivity(activity timeline.Activity, opts EnhancedTimelineOptions, prefix string, isLast bool) {
@@ -288,12 +181,18 @@ func displayEnhancedActivity(activity timeline.Activity, opts EnhancedTimelineOp
 	timeStr := activity.Timestamp.Format("15:04")
 	sourceStr := fmt.Sprintf("%s:", activity.Source)
 
+	// Build title with duration if available
+	title := activity.Title
+	if activity.Duration != nil {
+		title = fmt.Sprintf("%s (%s)", activity.Title, activity.FormatDuration())
+	}
+
 	// Full format with details
 	fmt.Printf("%s%s %s %s\n",
 		prefix,
 		colorize(timeStr, Bold+Green, opts.UseColors),
-		colorize(sourceStr, Gray, opts.UseColors),
-		colorize(activity.Title, getActivityColor(activity), opts.UseColors))
+		colorize(sourceStr, DarkGray, opts.UseColors),
+		colorize(title, getActivityColor(activity), opts.UseColors))
 
 	// Show description if available and details requested
 	if opts.ShowDetails && activity.Description != "" {

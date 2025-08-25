@@ -464,16 +464,38 @@ func (c *CalendarConnector) parseICalLine(line string, event *ICalEvent) {
 	case "LOCATION":
 		event.Location = c.unescapeICalValue(value)
 	case "DTSTART":
-		if t, err := c.parseICalDateTime(value); err == nil {
+		// Check for timezone parameter
+		var tzid string
+		if len(propParts) > 1 {
+			params := strings.Split(propParts[1], ";")
+			for _, param := range params {
+				if strings.HasPrefix(param, "TZID=") {
+					tzid = strings.TrimPrefix(param, "TZID=")
+					break
+				}
+			}
+		}
+		if t, err := c.parseICalDateTimeWithTZ(value, tzid); err == nil {
 			event.StartTime = t
 		} else if c.isDebugMode() {
-			log.Printf("Calendar Debug: Failed to parse DTSTART '%s': %v", value, err)
+			log.Printf("Calendar Debug: Failed to parse DTSTART '%s' with TZID '%s': %v", value, tzid, err)
 		}
 	case "DTEND":
-		if t, err := c.parseICalDateTime(value); err == nil {
+		// Check for timezone parameter
+		var tzid string
+		if len(propParts) > 1 {
+			params := strings.Split(propParts[1], ";")
+			for _, param := range params {
+				if strings.HasPrefix(param, "TZID=") {
+					tzid = strings.TrimPrefix(param, "TZID=")
+					break
+				}
+			}
+		}
+		if t, err := c.parseICalDateTimeWithTZ(value, tzid); err == nil {
 			event.EndTime = t
 		} else if c.isDebugMode() {
-			log.Printf("Calendar Debug: Failed to parse DTEND '%s': %v", value, err)
+			log.Printf("Calendar Debug: Failed to parse DTEND '%s' with TZID '%s': %v", value, tzid, err)
 		}
 	case "STATUS":
 		event.Status = value
@@ -489,30 +511,83 @@ func (c *CalendarConnector) parseICalLine(line string, event *ICalEvent) {
 	}
 }
 
-// parseICalDateTime parses iCal date/time formats
+// parseICalDateTime parses iCal date/time formats (legacy - kept for backward compatibility)
 func (c *CalendarConnector) parseICalDateTime(value string) (time.Time, error) {
+	return c.parseICalDateTimeWithTZ(value, "")
+}
+
+// parseICalDateTimeWithTZ parses iCal date/time formats with timezone support
+func (c *CalendarConnector) parseICalDateTimeWithTZ(value, tzid string) (time.Time, error) {
 	// Handle different iCal date/time formats
 	formats := []string{
 		"20060102T150405Z", // UTC format
-		"20060102T150405",  // Local format
+		"20060102T150405",  // Local/timezone format
 		"20060102",         // Date only
 	}
 
+	var parsedTime time.Time
+	var err error
+
+	// Try to parse with each format
 	for _, format := range formats {
-		if t, err := time.Parse(format, value); err == nil {
-			if c.isDebugMode() {
-				log.Printf("Calendar Debug: Successfully parsed date/time '%s' using format '%s' -> %s",
-					value, format, t.Format("2006-01-02 15:04:05"))
-			}
-			return t, nil
+		if parsedTime, err = time.Parse(format, value); err == nil {
+			break
 		}
 	}
 
-	if c.isDebugMode() {
-		log.Printf("Calendar Debug: Failed to parse date/time with all formats: %s", value)
+	if err != nil {
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Failed to parse date/time with all formats: %s", value)
+		}
+		return time.Time{}, fmt.Errorf("unable to parse date/time: %s", value)
 	}
 
-	return time.Time{}, fmt.Errorf("unable to parse date/time: %s", value)
+	// Handle timezone conversion
+	if tzid != "" && !strings.HasSuffix(value, "Z") {
+		// Load the specified timezone
+		loc, err := time.LoadLocation(tzid)
+		if err != nil {
+			if c.isDebugMode() {
+				log.Printf("Calendar Debug: Failed to load timezone '%s', falling back to local time: %v", tzid, err)
+			}
+			// If timezone loading fails, treat as local time
+			loc = time.Local
+		}
+		
+		// If the parsed time doesn't have timezone info, assume it's in the specified timezone
+		if parsedTime.Location() == time.UTC && !strings.HasSuffix(value, "Z") {
+			parsedTime = time.Date(
+				parsedTime.Year(), parsedTime.Month(), parsedTime.Day(),
+				parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(),
+				parsedTime.Nanosecond(), loc,
+			)
+		}
+		
+		// Convert to local timezone for display
+		parsedTime = parsedTime.In(time.Local)
+		
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Parsed '%s' with TZID '%s' -> %s (local: %s)",
+				value, tzid, parsedTime.Format("2006-01-02 15:04:05 MST"), 
+				parsedTime.In(time.Local).Format("2006-01-02 15:04:05 MST"))
+		}
+	} else if strings.HasSuffix(value, "Z") {
+		// UTC time, convert to local
+		parsedTime = parsedTime.In(time.Local)
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Parsed UTC time '%s' -> %s (local: %s)",
+				value, parsedTime.UTC().Format("2006-01-02 15:04:05 UTC"), 
+				parsedTime.Format("2006-01-02 15:04:05 MST"))
+		}
+	} else {
+		// No timezone specified, assume local time
+		if c.isDebugMode() {
+			log.Printf("Calendar Debug: Parsed local time '%s' -> %s",
+				value, parsedTime.Format("2006-01-02 15:04:05"))
+		}
+	}
+
+	return parsedTime, nil
 }
 
 // unescapeICalValue unescapes iCal text values

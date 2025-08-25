@@ -18,9 +18,6 @@ func TestDefaultTimelineOptions(t *testing.T) {
 		t.Error("ShowDetails should be false by default")
 	}
 
-	if !opts.ShowTimestamps {
-		t.Error("ShowTimestamps should be true by default")
-	}
 
 	if opts.GroupByHour {
 		t.Error("GroupByHour should be false by default")
@@ -30,8 +27,8 @@ func TestDefaultTimelineOptions(t *testing.T) {
 		t.Errorf("Expected MaxItems to be 500, got %d", opts.MaxItems)
 	}
 
-	if opts.Format != "visual" {
-		t.Errorf("Expected Format to be 'visual', got %s", opts.Format)
+	if opts.Format != "table" {
+		t.Errorf("Expected Format to be 'table', got %s", opts.Format)
 	}
 }
 
@@ -70,9 +67,12 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 		"Timeline for Monday, January 15, 2024",
 		"Found 3 activities",
 		"Activities (chronological order):",
-		"09:00 [calendar] Morning standup",
-		"12:00 [github] Fix authentication bug",
-		"14:30 [github] Add unit tests",
+		"09:00",
+		"Morning standup (30m)",
+		"12:00",
+		"Fix authentication bug",
+		"14:30",
+		"Add unit tests",
 	}
 
 	for _, expected := range expectedStrings {
@@ -110,36 +110,6 @@ func TestDisplayTimeline_WithDetails(t *testing.T) {
 	}
 }
 
-func TestDisplayTimeline_WithoutTimestamps(t *testing.T) {
-	tl := createTestTimeline()
-	opts := DefaultTimelineOptions()
-	opts.ShowTimestamps = false
-
-	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
-		if err != nil {
-			t.Errorf("DisplayTimeline failed: %v", err)
-		}
-	})
-
-	// Should not contain timestamps
-	if strings.Contains(output, "09:00") {
-		t.Error("Output should not contain timestamps when ShowTimestamps is false")
-	}
-
-	// Should still contain activity info
-	expectedStrings := []string{
-		"[calendar] Morning standup",
-		"[github] Fix authentication bug",
-		"[github] Add unit tests",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Output should contain %q, got:\n%s", expected, output)
-		}
-	}
-}
 
 func TestDisplayTimeline_GroupByHour(t *testing.T) {
 	tl := createTestTimeline()
@@ -231,10 +201,21 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 		}
 	})
 
-	// JSON output is not fully implemented, should show message
-	expected := "JSON output not fully implemented. Use --format=visual instead."
-	if !strings.Contains(output, expected) {
-		t.Errorf("Expected JSON not implemented message, got: %s", output)
+	// JSON output should be valid JSON
+	expectedStrings := []string{
+		`"date":`,
+		`"activities":`,
+		`"Morning standup"`,
+		`"Fix authentication bug"`,
+		`"Add unit tests"`,
+		`"calendar"`,
+		`"github"`,
+	}
+	
+	for _, expected := range expectedStrings {
+		if !strings.Contains(output, expected) {
+			t.Errorf("JSON output should contain %q, got: %s", expected, output)
+		}
 	}
 }
 

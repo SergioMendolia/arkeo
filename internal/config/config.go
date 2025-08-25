@@ -50,10 +50,8 @@ type PreferencesConfig struct {
 	DefaultFormat string `yaml:"default_format" mapstructure:"default_format"`
 
 	// Timeline preferences
-	GroupByHour    bool `yaml:"group_by_hour" mapstructure:"group_by_hour"`
-	MaxItems       int  `yaml:"max_items" mapstructure:"max_items"`
-	ShowTimeline   bool `yaml:"show_timeline" mapstructure:"show_timeline"`
-	ShowTimestamps bool `yaml:"show_timestamps" mapstructure:"show_timestamps"`
+	GroupByHour bool `yaml:"group_by_hour" mapstructure:"group_by_hour"`
+	MaxItems    int  `yaml:"max_items" mapstructure:"max_items"`
 
 	// Performance preferences
 	ParallelFetch bool `yaml:"parallel_fetch" mapstructure:"parallel_fetch"`
@@ -89,17 +87,15 @@ func DefaultConfig() *Config {
 		},
 		Preferences: PreferencesConfig{
 			// Display preferences - control how timeline information is presented
-			UseColors:     true,     // Use colors in terminal output
-			ShowDetails:   false,    // Show detailed information for activities
-			ShowProgress:  true,     // Show progress bars during data fetching
-			ShowGaps:      true,     // Highlight time gaps in the timeline
-			DefaultFormat: "visual", // Default output format (visual, table, json, csv)
+			UseColors:     true,    // Use colors in terminal output
+			ShowDetails:   false,   // Show detailed information for activities
+			ShowProgress:  true,    // Show progress bars during data fetching
+			ShowGaps:      true,    // Highlight time gaps in the timeline
+			DefaultFormat: "table", // Default output format (table, json, csv)
 
 			// Timeline preferences - control how timeline data is organized
-			GroupByHour:    false, // Group activities by hour
-			MaxItems:       500,   // Maximum number of items to display
-			ShowTimeline:   false, // Show visual timeline markers
-			ShowTimestamps: true,  // Show timestamps for each activity
+			GroupByHour: false, // Group activities by hour
+			MaxItems:    500,   // Maximum number of items to display
 
 			// Performance preferences - control application performance
 			ParallelFetch: true, // Fetch data from connectors in parallel
@@ -163,12 +159,31 @@ func DefaultConfig() *Config {
 			},
 			"macos_system": {
 				Enabled: false,
-				Config: map[string]interface{}{
+				Config:  map[string]interface{}{
 					// Note: This connector uses the macOS 'log show' command to retrieve system events.
 					// It monitors loginwindow events for screen lock state changes for the full day.
 					// When the screen is locked, it generates "Computer is idle" activities.
 					// When the screen is unlocked, it generates "Computer is active" activities.
 					// No additional configuration is required beyond enabling the connector.
+				},
+			},
+			"webhooks": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// Array of webhook configurations
+					// Each webhook should have: name (display name), url (endpoint), token (Bearer token)
+					"webhooks": []map[string]interface{}{
+						{
+							// Display name for activities from this webhook
+							"name": "My Service",
+
+							// Webhook endpoint URL (will be called with ?date=YYYY-MM-DD parameter)
+							"url": "https://api.myservice.com/activities",
+
+							// Bearer token for authentication
+							"token": "your-bearer-token-here",
+						},
+					},
 				},
 			},
 		},
@@ -431,7 +446,7 @@ func (m *Manager) getConfigDir() (string, error) {
 // setDefaults sets default configuration values using the central default config
 func (m *Manager) setDefaults() {
 	defaults := DefaultConfig()
-	
+
 	// App defaults
 	m.viper.SetDefault("app.date_format", defaults.App.DateFormat)
 	m.viper.SetDefault("app.log_level", defaults.App.LogLevel)
@@ -445,8 +460,6 @@ func (m *Manager) setDefaults() {
 	m.viper.SetDefault("preferences.default_format", prefs.DefaultFormat)
 	m.viper.SetDefault("preferences.group_by_hour", prefs.GroupByHour)
 	m.viper.SetDefault("preferences.max_items", prefs.MaxItems)
-	m.viper.SetDefault("preferences.show_timeline", prefs.ShowTimeline)
-	m.viper.SetDefault("preferences.show_timestamps", prefs.ShowTimestamps)
 	m.viper.SetDefault("preferences.parallel_fetch", prefs.ParallelFetch)
 	m.viper.SetDefault("preferences.fetch_timeout", prefs.FetchTimeout)
 }
@@ -491,21 +504,21 @@ func (m *Manager) copyExampleConfig() error {
 // ExportExampleConfig generates a config.example.yaml file with detailed comments
 func (m *Manager) ExportExampleConfig(outputPath string) error {
 	exampleYAML := m.GenerateExampleConfigYAML()
-	
+
 	if err := os.WriteFile(outputPath, []byte(exampleYAML), 0644); err != nil {
 		return fmt.Errorf("failed to write example config: %w", err)
 	}
-	
+
 	return nil
 }
 
 // GenerateExampleConfigYAML creates a YAML string with the default configuration and detailed comments
 func (m *Manager) GenerateExampleConfigYAML() string {
 	var b strings.Builder
-	
+
 	b.WriteString("# arkeo Configuration Example\n")
 	b.WriteString("# Copy this file to ~/.config/arkeo/config.yaml and customize as needed\n\n")
-	
+
 	// App section
 	b.WriteString("# Application settings\n")
 	b.WriteString("app:\n")
@@ -514,7 +527,7 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("  # Application logging level (debug, info, warn, error)\n")
 	b.WriteString("  # Set to \"debug\" to enable detailed logging for connectors\n")
 	b.WriteString("  log_level: \"info\"\n\n\n")
-	
+
 	// Preferences section
 	b.WriteString("# User preferences configuration\n")
 	b.WriteString("# These settings control the application's behavior and appearance\n")
@@ -525,22 +538,20 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("  show_details: false       # Show detailed information for activities\n")
 	b.WriteString("  show_progress: true       # Show progress bars during data fetching\n")
 	b.WriteString("  show_gaps: true           # Highlight time gaps in the timeline\n")
-	b.WriteString("  default_format: \"visual\"  # Default output format (visual, table, json, csv)\n\n")
+	b.WriteString("  default_format: \"table\"  # Default output format (table, json, csv)\n\n")
 	b.WriteString("  # Timeline preferences\n")
 	b.WriteString("  # Control how timeline data is organized and displayed\n")
 	b.WriteString("  group_by_hour: false          # Group activities by hour\n")
-	b.WriteString("  max_items: 500                # Maximum number of items to display\n")
-	b.WriteString("  show_timeline: false          # Show visual timeline markers\n")
-	b.WriteString("  show_timestamps: true         # Show timestamps for each activity\n\n")
+	b.WriteString("  max_items: 500                # Maximum number of items to display\n\n")
 	b.WriteString("  # Performance preferences\n")
 	b.WriteString("  # Control application performance characteristics\n")
 	b.WriteString("  parallel_fetch: true          # Fetch data from connectors in parallel\n")
 	b.WriteString("  fetch_timeout: 30             # Connector timeout in seconds\n\n\n")
-	
+
 	// Connectors section
 	b.WriteString("# Connector configurations\n")
 	b.WriteString("connectors:\n")
-	
+
 	// GitHub connector
 	b.WriteString("  # GitHub connector - fetches commits, issues, and PRs\n")
 	b.WriteString("  github:\n")
@@ -553,7 +564,7 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("      username: \"your-username\"\n\n")
 	b.WriteString("      # Include activities from private repositories\n")
 	b.WriteString("      include_private: false\n\n\n")
-	
+
 	// Calendar connector
 	b.WriteString("  # Google Calendar connector - fetches calendar events using secret iCal URLs\n")
 	b.WriteString("  calendar:\n")
@@ -565,7 +576,7 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("      ical_urls: \"https://calendar.google.com/calendar/ical/your-email@gmail.com/private-abc123def456/basic.ics\"\n\n")
 	b.WriteString("      # Include declined calendar events\n")
 	b.WriteString("      include_declined: false\n\n")
-	
+
 	// GitLab connector
 	b.WriteString("  # GitLab connector - fetches push events from GitLab API (all branches)\n")
 	b.WriteString("  gitlab:\n")
@@ -578,7 +589,7 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("      # GitLab personal access token from Profile > Access Tokens\n")
 	b.WriteString("      # Requires 'read_api' scope to access user events data\n")
 	b.WriteString("      access_token: \"your-gitlab-access-token\"\n\n")
-	
+
 	// YouTrack connector
 	b.WriteString("  # YouTrack connector - fetches activities and issue updates from YouTrack\n")
 	b.WriteString("  youtrack:\n")
@@ -592,7 +603,7 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("      token: \"perm:your-youtrack-token-here\"\n\n")
 	b.WriteString("      # Username to filter activities for (optional, defaults to token owner)\n")
 	b.WriteString("      username: \"your-username\"\n\n")
-	
+
 	// macOS System connector
 	b.WriteString("  # macOS System Events connector - fetches screen lock/unlock events (macOS only)\n")
 	b.WriteString("  macos_system:\n")
@@ -603,6 +614,23 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("      # When the screen is locked, it generates \"Computer is idle\" activities.\n")
 	b.WriteString("      # When the screen is unlocked, it generates \"Computer is active\" activities.\n")
 	b.WriteString("      # No additional configuration is required beyond enabling the connector.\n\n")
-	
+
+	// Webhooks connector
+	b.WriteString("  # Webhooks connector - fetches activities from HTTP webhook endpoints\n")
+	b.WriteString("  webhooks:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # Array of webhook configurations\n")
+	b.WriteString("      # Each webhook will be called with ?date=YYYY-MM-DD parameter\n")
+	b.WriteString("      # Expected response: JSON array of activity objects\n")
+	b.WriteString("      webhooks:\n")
+	b.WriteString("        - name: \"My Service\"                              # Display name for activities\n")
+	b.WriteString("          url: \"https://api.myservice.com/activities\"     # Webhook endpoint URL\n")
+	b.WriteString("          token: \"your-bearer-token-here\"                # Bearer token for authentication\n")
+	b.WriteString("        # Add more webhooks as needed:\n")
+	b.WriteString("        # - name: \"Another Service\"\n")
+	b.WriteString("        #   url: \"https://api.another.com/events\"\n")
+	b.WriteString("        #   token: \"another-token\"\n\n")
+
 	return b.String()
 }

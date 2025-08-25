@@ -104,8 +104,17 @@ func (p *ProgressBar) Finish() {
 	fmt.Println() // New line after completion
 }
 
-// render displays the current state of the progress bar
+// render displays the current state of the progress bar (for single bar usage)
 func (p *ProgressBar) render() {
+	display := p.buildDisplay()
+
+	// Clear the line and print (for single progress bar)
+	fmt.Printf("\r%s", strings.Repeat(" ", 100)) // Clear line
+	fmt.Printf("\r%s", display)
+}
+
+// buildDisplay builds the display string without printing it
+func (p *ProgressBar) buildDisplay() string {
 	percentage := 0
 	if p.total > 0 {
 		percentage = (p.current * 100) / p.total
@@ -150,9 +159,7 @@ func (p *ProgressBar) render() {
 		display += " " + p.suffix
 	}
 
-	// Clear the line and print
-	fmt.Printf("\r%s", strings.Repeat(" ", 100)) // Clear line
-	fmt.Printf("\r%s", display)
+	return display
 }
 
 // Spinner represents a spinning progress indicator
@@ -272,6 +279,7 @@ type MultiProgress struct {
 	bars    []*NamedProgressBar
 	mu      sync.Mutex
 	started bool
+	aligned bool
 }
 
 // NamedProgressBar wraps a progress bar with a name
@@ -285,6 +293,7 @@ func NewMultiProgress() *MultiProgress {
 	return &MultiProgress{
 		bars:    make([]*NamedProgressBar, 0),
 		started: false,
+		aligned: false,
 	}
 }
 
@@ -306,10 +315,46 @@ func (mp *MultiProgress) AddBar(name string, total int) *ProgressBar {
 	return bar
 }
 
+// updateAlignment updates all bar prefixes to be aligned
+func (mp *MultiProgress) updateAlignment() {
+	if len(mp.bars) == 0 || mp.aligned {
+		return
+	}
+
+	// Find the longest name
+	maxLength := 0
+	for _, namedBar := range mp.bars {
+		if len(namedBar.name) > maxLength {
+			maxLength = len(namedBar.name)
+		}
+	}
+
+	// Update all bars with padded prefixes
+	for _, namedBar := range mp.bars {
+		paddedName := fmt.Sprintf("%-*s", maxLength, namedBar.name)
+		namedBar.bar.SetPrefix(paddedName)
+	}
+
+	mp.aligned = true
+}
+
+// AlignBars manually triggers alignment (call after all bars are added)
+func (mp *MultiProgress) AlignBars() {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	mp.aligned = false // Reset alignment flag
+	mp.updateAlignment()
+}
+
 // Render displays all progress bars
 func (mp *MultiProgress) Render() {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
+
+	// Update alignment if this is the first render or bars were added
+	if !mp.started {
+		mp.updateAlignment()
+	}
 
 	// Move cursor up to overwrite previous output
 	if mp.started {
@@ -317,9 +362,19 @@ func (mp *MultiProgress) Render() {
 	}
 	mp.started = true
 
-	for _, namedBar := range mp.bars {
-		namedBar.bar.render()
-		fmt.Println() // New line after each bar
+	// Clear and render each progress bar line
+	for i, namedBar := range mp.bars {
+		// Move to beginning of line and clear it
+		fmt.Print("\r\033[K")
+
+		// Build and print the display string
+		display := namedBar.bar.buildDisplay()
+		fmt.Print(display)
+
+		// Move to next line (except for the last one)
+		if i < len(mp.bars)-1 {
+			fmt.Print("\n")
+		}
 	}
 }
 
@@ -379,9 +434,12 @@ func (s *Status) print(icon, color, level, msg string) {
 
 // ConnectorProgress tracks progress for multiple connectors
 type ConnectorProgress struct {
-	connectors map[string]*ConnectorStatus
-	status     *Status
-	mu         sync.Mutex
+	connectors      map[string]*ConnectorStatus
+	progressBars    map[string]*ProgressBar
+	multiProgress   *MultiProgress
+	status          *Status
+	mu              sync.Mutex
+	useProgressBars bool
 }
 
 // ConnectorStatus represents the status of a single connector
@@ -397,8 +455,28 @@ type ConnectorStatus struct {
 // NewConnectorProgress creates a new connector progress tracker
 func NewConnectorProgress(useColors bool) *ConnectorProgress {
 	return &ConnectorProgress{
-		connectors: make(map[string]*ConnectorStatus),
-		status:     NewStatus(useColors),
+		connectors:      make(map[string]*ConnectorStatus),
+		progressBars:    make(map[string]*ProgressBar),
+		multiProgress:   NewMultiProgress(),
+		status:          NewStatus(useColors),
+		useProgressBars: true,
+	}
+}
+
+// AlignProgressBars triggers alignment of all progress bars (call after all connectors are added)
+func (cp *ConnectorProgress) AlignProgressBars() {
+	if cp.useProgressBars {
+		cp.multiProgress.AlignBars()
+		cp.multiProgress.Render() // Initial render after alignment
+	}
+}
+
+// NewConnectorProgressSimple creates a connector progress tracker without progress bars (legacy mode)
+func NewConnectorProgressSimple(useColors bool) *ConnectorProgress {
+	return &ConnectorProgress{
+		connectors:      make(map[string]*ConnectorStatus),
+		status:          NewStatus(useColors),
+		useProgressBars: false,
 	}
 }
 
@@ -413,7 +491,15 @@ func (cp *ConnectorProgress) StartConnector(name string) {
 		startTime: time.Now(),
 	}
 
-	cp.status.Progress(fmt.Sprintf("Starting %s connector...", name))
+	if cp.useProgressBars {
+		// Create a progress bar for this connector
+		bar := cp.multiProgress.AddBar(name, 1)
+		bar.Update(0) // Start at 0%
+		cp.progressBars[name] = bar
+		// Don't render immediately - wait for alignment
+	} else {
+		cp.status.Progress(fmt.Sprintf("Starting %s connector...", name))
+	}
 }
 
 // UpdateConnector updates connector status
@@ -426,11 +512,21 @@ func (cp *ConnectorProgress) UpdateConnector(name, status string, count, total i
 		connector.count = count
 		connector.total = total
 
-		if total > 0 {
-			percentage := (count * 100) / total
-			cp.status.Progress(fmt.Sprintf("%s: %s (%d%%, %d/%d)", name, status, percentage, count, total))
+		if cp.useProgressBars {
+			if bar, exists := cp.progressBars[name]; exists {
+				bar.SetSuffix(status)
+				if total > 0 {
+					bar.Update(count)
+				}
+				cp.multiProgress.Render()
+			}
 		} else {
-			cp.status.Progress(fmt.Sprintf("%s: %s (%d items)", name, status, count))
+			if total > 0 {
+				percentage := (count * 100) / total
+				cp.status.Progress(fmt.Sprintf("%s: %s (%d%%, %d/%d)", name, status, percentage, count, total))
+			} else {
+				cp.status.Progress(fmt.Sprintf("%s: %s (%d items)", name, status, count))
+			}
 		}
 	}
 }
@@ -445,14 +541,50 @@ func (cp *ConnectorProgress) FinishConnector(name string, count int, err error) 
 		connector.error = err
 		duration := time.Since(connector.startTime)
 
-		if err != nil {
-			connector.status = "failed"
-			cp.status.Error(fmt.Sprintf("%s failed: %v", name, err))
+		if cp.useProgressBars {
+			if bar, exists := cp.progressBars[name]; exists {
+				if err != nil {
+					connector.status = "failed"
+					bar.SetSuffix("failed")
+				} else {
+					connector.status = "completed"
+					bar.SetSuffix(fmt.Sprintf("completed (%d activities)", count))
+				}
+				bar.Update(1) // Complete the bar
+				cp.multiProgress.Render()
+			}
 		} else {
-			connector.status = "completed"
-			cp.status.Success(fmt.Sprintf("%s completed: %d activities in %v", name, count, duration.Round(time.Millisecond)))
+			if err != nil {
+				connector.status = "failed"
+				cp.status.Error(fmt.Sprintf("%s failed: %v", name, err))
+			} else {
+				connector.status = "completed"
+				cp.status.Success(fmt.Sprintf("%s completed: %d activities in %v", name, count, duration.Round(time.Millisecond)))
+			}
 		}
 	}
+}
+
+// HasConnectorError returns true if a connector had an error
+func (cp *ConnectorProgress) HasConnectorError(name string) bool {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	if connector, exists := cp.connectors[name]; exists {
+		return connector.error != nil
+	}
+	return false
+}
+
+// IsConnectorFinished returns true if a connector is already finished (completed or failed)
+func (cp *ConnectorProgress) IsConnectorFinished(name string) bool {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	if connector, exists := cp.connectors[name]; exists {
+		return connector.status == "completed" || connector.status == "failed"
+	}
+	return false
 }
 
 // PrintSummary prints a summary of all connectors
@@ -464,8 +596,10 @@ func (cp *ConnectorProgress) PrintSummary() {
 		return
 	}
 
-	fmt.Println()
-	cp.status.Info("Connector Summary:")
+	// Add extra space after progress bars if we used them
+	if cp.useProgressBars {
+		fmt.Println("\n") // Two newlines to ensure separation
+	}
 
 	totalActivities := 0
 	successCount := 0

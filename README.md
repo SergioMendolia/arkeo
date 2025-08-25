@@ -6,7 +6,7 @@ The tool is designed to answer the question "What the hell did I do on that day?
 
 ## Features
 
-- 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events and more
+- 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events, custom webhooks and more
 - 📅 **Daily Timeline**: View all your activities in chronological order
 
 - ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
@@ -82,6 +82,67 @@ Fetches screen lock/unlock events on macOS systems using system logs. This conne
 **Activities Generated:**
 - "Computer is idle" - when the screen is locked
 - "Computer is active" - when the screen is unlocked
+
+### Webhooks Connector
+Fetches activities from custom HTTP webhook endpoints. This connector allows you to integrate any service that can provide activity data via HTTP API.
+
+**Features:**
+- Support for multiple webhook endpoints
+- Bearer token authentication
+- Configurable display names for each webhook source
+- Flexible activity data format
+- Error resilience (continues with other webhooks if one fails)
+
+**Configuration:**
+Each webhook requires:
+- `name`: Display name for activities from this webhook
+- `url`: HTTP endpoint URL 
+- `token`: Bearer token for authentication
+
+**API Contract:**
+Arkeo calls your webhook with: `GET {url}?date=YYYY-MM-DD`
+
+Your webhook should respond with JSON array of activities:
+```json
+[
+  {
+    "timestamp": "2023-12-25T10:30:00Z",
+    "title": "Completed task XYZ",
+    "description": "Optional detailed description",
+    "type": "task",
+    "metadata": {
+      "project": "MyProject",
+      "priority": "high"
+    }
+  }
+]
+```
+
+**Activity Fields:**
+- `timestamp` (required): ISO 8601 timestamp (RFC3339 format preferred)
+- `title` (required): Activity title/summary
+- `description` (optional): Detailed description
+- `type` (optional): Activity type (defaults to "webhook")
+- `metadata` (optional): Additional key-value data
+
+**Supported timestamp formats:**
+- `2023-12-25T10:30:00Z` (RFC3339 - preferred)
+- `2023-12-25T10:30:00+01:00` (RFC3339 with timezone)
+- `2023-12-25 10:30:00` (Simple format)
+
+**Example Configuration:**
+```yaml
+webhooks:
+  enabled: true
+  config:
+    webhooks:
+      - name: "JIRA Tasks"
+        url: "https://api.mycompany.com/jira-activities"
+        token: "Bearer-token-for-jira-api"
+      - name: "Time Tracker"
+        url: "https://timetracker.mycompany.com/api/activities"
+        token: "another-bearer-token"
+```
 
 
 

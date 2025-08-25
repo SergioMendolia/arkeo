@@ -191,7 +191,6 @@ var preferencesCmd = &cobra.Command{
 		fmt.Printf("\nTimeline:\n")
 		fmt.Printf("  Group by Hour:   %v\n", prefs.GroupByHour)
 		fmt.Printf("  Max Items:       %d\n", prefs.MaxItems)
-		fmt.Printf("  Show Timeline:   %v\n", prefs.ShowTimeline)
 	},
 }
 
@@ -228,8 +227,6 @@ var preferencesExportCmd = &cobra.Command{
 		fmt.Printf("  default_format: %s\n", prefs.DefaultFormat)
 		fmt.Printf("  group_by_hour: %v\n", prefs.GroupByHour)
 		fmt.Printf("  max_items: %d\n", prefs.MaxItems)
-		fmt.Printf("  show_timeline: %v\n", prefs.ShowTimeline)
-		fmt.Printf("  show_timestamps: %v\n", prefs.ShowTimestamps)
 		fmt.Printf("  parallel_fetch: %v\n", prefs.ParallelFetch)
 		fmt.Printf("  fetch_timeout: %d\n", prefs.FetchTimeout)
 	},
