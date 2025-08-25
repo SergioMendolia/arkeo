@@ -78,10 +78,7 @@ func (g *GitHubConnector) TestConnection(ctx context.Context) error {
 		return fmt.Errorf("no token configured")
 	}
 
-	// Use timeout from configuration
-	timeout := g.GetConfigInt(CommonConfigKeys.Timeout)
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
+	// HTTP client timeout is already configured in BaseConnector
 
 	req, err := g.CreateBearerRequest(ctx, "GET", "https://api.github.com/user", token)
 	if err != nil {
@@ -108,10 +105,7 @@ func (g *GitHubConnector) TestConnection(ctx context.Context) error {
 func (g *GitHubConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
 	var activities []timeline.Activity
 
-	// Use timeout from configuration
-	timeout := g.GetConfigInt(CommonConfigKeys.Timeout)
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
+	// HTTP client timeout is already configured in BaseConnector
 
 	// Enable debug logging if configured
 	if g.IsDebugMode() {

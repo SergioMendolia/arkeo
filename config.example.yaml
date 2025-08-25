@@ -11,7 +11,6 @@ app:
   log_level: "info"
 
 
-
 # User preferences configuration
 # These settings control the application's behavior and appearance
 preferences:
@@ -30,16 +29,10 @@ preferences:
   show_timeline: false          # Show visual timeline markers
   show_timestamps: true         # Show timestamps for each activity
 
-  # Behavior preferences
-  # Control application behavior and defaults
-
-
-
   # Performance preferences
   # Control application performance characteristics
   parallel_fetch: true          # Fetch data from connectors in parallel
   fetch_timeout: 30             # Connector timeout in seconds
-
 
 
 # Connector configurations
@@ -57,7 +50,6 @@ connectors:
 
       # Include activities from private repositories
       include_private: false
-
 
 
   # Google Calendar connector - fetches calendar events using secret iCal URLs
@@ -101,24 +93,6 @@ connectors:
       # Username to filter activities for (optional, defaults to token owner)
       username: "your-username"
 
-      # Include work items (time tracking entries)
-      include_work_items: true
-
-      # Include comment activities
-      include_comments: true
-
-      # Include issue field changes
-      include_issues: true
-
-      # NOTE: At least one activity category (include_work_items, include_comments, or include_issues)
-      # must be enabled. If all are disabled, CustomFieldCategory will be used as fallback.
-
-      # Custom API fields for compatibility (optional)
-      # Use this if you have issues with the default fields on older YouTrack versions
-      # Default includes idReadable for human-readable issue keys (PROJ-123 format)
-      # Also includes issue reference for comment activities
-      # api_fields: "id,timestamp,author(login,name),category(id,name),target(id,idReadable,summary,issue(id,idReadable,summary))"
-
   # macOS System Events connector - fetches screen lock/unlock events (macOS only)
   macos_system:
     enabled: false
@@ -128,3 +102,4 @@ connectors:
       # When the screen is locked, it generates "Computer is idle" activities.
       # When the screen is unlocked, it generates "Computer is active" activities.
       # No additional configuration is required beyond enabling the connector.
+

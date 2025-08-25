@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -57,6 +58,121 @@ type PreferencesConfig struct {
 	// Performance preferences
 	ParallelFetch bool `yaml:"parallel_fetch" mapstructure:"parallel_fetch"`
 	FetchTimeout  int  `yaml:"fetch_timeout" mapstructure:"fetch_timeout"`
+}
+
+// Preference setter methods for direct config access
+func (m *Manager) SetUseColors(value bool) error {
+	m.config.Preferences.UseColors = value
+	return m.Save()
+}
+
+func (m *Manager) SetShowDetails(value bool) error {
+	m.config.Preferences.ShowDetails = value
+	return m.Save()
+}
+
+func (m *Manager) SetDefaultFormat(format string) error {
+	m.config.Preferences.DefaultFormat = format
+	return m.Save()
+}
+
+func (m *Manager) GetPreferences() *PreferencesConfig {
+	return &m.config.Preferences
+}
+
+// DefaultConfig returns a config with default values and comprehensive documentation
+func DefaultConfig() *Config {
+	return &Config{
+		App: AppConfig{
+			DateFormat: "2006-01-02", // Go time format for displaying dates
+			LogLevel:   "info",       // Application logging level (debug, info, warn, error)
+		},
+		Preferences: PreferencesConfig{
+			// Display preferences - control how timeline information is presented
+			UseColors:     true,     // Use colors in terminal output
+			ShowDetails:   false,    // Show detailed information for activities
+			ShowProgress:  true,     // Show progress bars during data fetching
+			ShowGaps:      true,     // Highlight time gaps in the timeline
+			DefaultFormat: "visual", // Default output format (visual, table, json, csv)
+
+			// Timeline preferences - control how timeline data is organized
+			GroupByHour:    false, // Group activities by hour
+			MaxItems:       500,   // Maximum number of items to display
+			ShowTimeline:   false, // Show visual timeline markers
+			ShowTimestamps: true,  // Show timestamps for each activity
+
+			// Performance preferences - control application performance
+			ParallelFetch: true, // Fetch data from connectors in parallel
+			FetchTimeout:  30,   // Connector timeout in seconds
+		},
+		Connectors: map[string]ConnectorConfig{
+			"github": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// Get a personal access token from: https://github.com/settings/tokens
+					// Requires 'repo' scope for private repos, 'public_repo' for public only
+					"token": "",
+
+					// Your GitHub username
+					"username": "",
+
+					// Include activities from private repositories
+					"include_private": false,
+				},
+			},
+			"calendar": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// Google Calendar secret iCal URLs (comma-separated)
+					// Get these from: Google Calendar > Settings and sharing > Integrate calendar > Secret address in iCal format
+					// Format: https://calendar.google.com/calendar/ical/[calendar-id]/[secret-key]/basic.ics
+					"ical_urls": "",
+
+					// Include declined calendar events
+					"include_declined": false,
+				},
+			},
+			"gitlab": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// GitLab instance URL (defaults to https://gitlab.com)
+					"gitlab_url": "https://gitlab.com",
+
+					// Your GitLab username
+					"username": "",
+
+					// GitLab personal access token from Profile > Access Tokens
+					// Requires 'read_api' scope to access user events data
+					"access_token": "",
+				},
+			},
+			"youtrack": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// YouTrack instance URL (e.g., https://mycompany.youtrack.cloud/)
+					"base_url": "",
+
+					// YouTrack permanent token
+					// Get from: Profile > Account Security > New token
+					// Requires YouTrack scope permissions
+					"token": "",
+
+					// Username to filter activities for (optional, defaults to token owner)
+					"username": "",
+				},
+			},
+			"macos_system": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// Note: This connector uses the macOS 'log show' command to retrieve system events.
+					// It monitors loginwindow events for screen lock state changes for the full day.
+					// When the screen is locked, it generates "Computer is idle" activities.
+					// When the screen is unlocked, it generates "Computer is active" activities.
+					// No additional configuration is required beyond enabling the connector.
+				},
+			},
+		},
+	}
 }
 
 // Manager handles configuration loading, saving, and management
@@ -312,130 +428,33 @@ func (m *Manager) getConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".config", "arkeo"), nil
 }
 
-// setDefaults sets default configuration values
+// setDefaults sets default configuration values using the central default config
 func (m *Manager) setDefaults() {
+	defaults := DefaultConfig()
+	
 	// App defaults
-	m.viper.SetDefault("app.date_format", "2006-01-02")
-	m.viper.SetDefault("app.log_level", "info")
+	m.viper.SetDefault("app.date_format", defaults.App.DateFormat)
+	m.viper.SetDefault("app.log_level", defaults.App.LogLevel)
 
 	// Preferences defaults
-	m.viper.SetDefault("preferences.use_colors", true)
-	m.viper.SetDefault("preferences.show_details", false)
-	m.viper.SetDefault("preferences.show_progress", true)
-	m.viper.SetDefault("preferences.show_gaps", true)
-	m.viper.SetDefault("preferences.default_format", "visual")
-
-	m.viper.SetDefault("preferences.group_by_hour", false)
-	m.viper.SetDefault("preferences.max_items", 500)
-	m.viper.SetDefault("preferences.show_timeline", false)
-	m.viper.SetDefault("preferences.show_timestamps", true)
-
-	m.viper.SetDefault("preferences.parallel_fetch", true)
-	m.viper.SetDefault("preferences.fetch_timeout", 30) // 30 seconds
-
+	prefs := defaults.Preferences
+	m.viper.SetDefault("preferences.use_colors", prefs.UseColors)
+	m.viper.SetDefault("preferences.show_details", prefs.ShowDetails)
+	m.viper.SetDefault("preferences.show_progress", prefs.ShowProgress)
+	m.viper.SetDefault("preferences.show_gaps", prefs.ShowGaps)
+	m.viper.SetDefault("preferences.default_format", prefs.DefaultFormat)
+	m.viper.SetDefault("preferences.group_by_hour", prefs.GroupByHour)
+	m.viper.SetDefault("preferences.max_items", prefs.MaxItems)
+	m.viper.SetDefault("preferences.show_timeline", prefs.ShowTimeline)
+	m.viper.SetDefault("preferences.show_timestamps", prefs.ShowTimestamps)
+	m.viper.SetDefault("preferences.parallel_fetch", prefs.ParallelFetch)
+	m.viper.SetDefault("preferences.fetch_timeout", prefs.FetchTimeout)
 }
 
 // createDefaultConfig creates a default configuration file
 func (m *Manager) createDefaultConfig() error {
-	// Create default config
-	defaultConfig := &Config{
-		App: AppConfig{
-			DateFormat: "2006-01-02",
-			LogLevel:   "info",
-		},
-
-		Preferences: PreferencesConfig{
-			UseColors:      true,
-			ShowDetails:    false,
-			ShowProgress:   true,
-			ShowGaps:       true,
-			DefaultFormat:  "visual",
-			GroupByHour:    false,
-			MaxItems:       500,
-			ShowTimeline:   false,
-			ShowTimestamps: true,
-			ParallelFetch:  true,
-			FetchTimeout:   30,
-		},
-		Connectors: map[string]ConnectorConfig{
-			"github": {
-				Enabled: false,
-				Config: map[string]interface{}{
-					"token":           "",
-					"username":        "",
-					"include_private": false,
-					"max_items":       100,
-					"timeout":         30,
-				},
-			},
-			"calendar": {
-				Enabled: false,
-				Config: map[string]interface{}{
-					"ical_urls":        "",
-					"include_declined": false,
-					"max_items":        100,
-					"timeout":          30,
-				},
-			},
-			"gitlab": {
-				Enabled: false,
-				Config: map[string]interface{}{
-					"gitlab_url":   "https://gitlab.com",
-					"username":     "",
-					"feed_token":   "",
-					"access_token": "",
-					"max_items":    100,
-					"timeout":      30,
-				},
-			},
-			"youtrack": {
-				Enabled: false,
-				Config: map[string]interface{}{
-					"base_url":  "",
-					"token":     "",
-					"username":  "",
-					"max_items": 100,
-					"timeout":   30,
-				},
-			},
-			"macos_system": {
-				Enabled: false,
-				Config: map[string]interface{}{
-					"max_items": 100,
-					"timeout":   30,
-				},
-			},
-		},
-	}
-
-	// Save to viper and file
-	m.config = defaultConfig
-
-	// Set config values in viper
-	m.viper.Set("app.date_format", defaultConfig.App.DateFormat)
-	m.viper.Set("app.log_level", defaultConfig.App.LogLevel)
-
-	// Set preferences configuration
-	m.viper.Set("preferences.use_colors", defaultConfig.Preferences.UseColors)
-	m.viper.Set("preferences.show_details", defaultConfig.Preferences.ShowDetails)
-	m.viper.Set("preferences.show_progress", defaultConfig.Preferences.ShowProgress)
-	m.viper.Set("preferences.show_gaps", defaultConfig.Preferences.ShowGaps)
-	m.viper.Set("preferences.default_format", defaultConfig.Preferences.DefaultFormat)
-	m.viper.Set("preferences.group_by_hour", defaultConfig.Preferences.GroupByHour)
-	m.viper.Set("preferences.max_items", defaultConfig.Preferences.MaxItems)
-	m.viper.Set("preferences.show_timeline", defaultConfig.Preferences.ShowTimeline)
-	m.viper.Set("preferences.show_timestamps", defaultConfig.Preferences.ShowTimestamps)
-	m.viper.Set("preferences.parallel_fetch", defaultConfig.Preferences.ParallelFetch)
-	m.viper.Set("preferences.fetch_timeout", defaultConfig.Preferences.FetchTimeout)
-
-	// Set connector configurations
-	for name, config := range defaultConfig.Connectors {
-		m.viper.Set(fmt.Sprintf("connectors.%s.enabled", name), config.Enabled)
-		for key, value := range config.Config {
-			m.viper.Set(fmt.Sprintf("connectors.%s.config.%s", name, key), value)
-		}
-	}
-
+	// Use the central default config
+	m.config = DefaultConfig()
 	return m.Save()
 }
 
@@ -462,76 +481,128 @@ func (m *Manager) Reset() error {
 	return m.copyExampleConfig()
 }
 
-// copyExampleConfig copies the example config file to the user's config path
+// copyExampleConfig creates a default configuration (simplified approach)
 func (m *Manager) copyExampleConfig() error {
-	// Get directory of executable
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+	// Simply use the default config instead of searching for example files
+	fmt.Println("Creating default configuration...")
+	return m.createDefaultConfig()
+}
+
+// ExportExampleConfig generates a config.example.yaml file with detailed comments
+func (m *Manager) ExportExampleConfig(outputPath string) error {
+	exampleYAML := m.GenerateExampleConfigYAML()
+	
+	if err := os.WriteFile(outputPath, []byte(exampleYAML), 0644); err != nil {
+		return fmt.Errorf("failed to write example config: %w", err)
 	}
-	exeDir := filepath.Dir(exePath)
-
-	// Define possible locations for config.example.yaml
-	possiblePaths := []string{
-		filepath.Join(exeDir, "config.example.yaml"),                          // Next to executable
-		filepath.Join(filepath.Dir(exeDir), "config.example.yaml"),            // Parent dir of executable
-		"config.example.yaml",                                                 // Current working directory
-		"/etc/arkeo/config.example.yaml",                                      // System-wide config
-		filepath.Join(os.Getenv("HOME"), "arkeo/config.example.yaml"),         // User home directory
-		filepath.Join(os.Getenv("HOME"), ".config/arkeo/config.example.yaml"), // XDG config dir
-	}
-
-	// Find the example config file
-	var examplePath string
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			examplePath = path
-			break
-		}
-	}
-
-	if examplePath == "" {
-		// If we can't find the example config, try to create a minimal valid config
-		fmt.Fprintf(os.Stderr, "Warning: Could not find config.example.yaml in any standard location.\n")
-		fmt.Fprintf(os.Stderr, "Creating a minimal default configuration instead.\n")
-		return m.createDefaultConfig()
-	}
-
-	// Ensure config directory exists
-	configDir := filepath.Dir(m.configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to create config directory: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Falling back to creating minimal default configuration.\n")
-		return m.createDefaultConfig()
-	}
-
-	// Read example config
-	exampleData, err := os.ReadFile(examplePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to read example config at %s: %v\n", examplePath, err)
-		fmt.Fprintf(os.Stderr, "Falling back to creating minimal default configuration.\n")
-		return m.createDefaultConfig()
-	}
-
-	// Write to config path
-	if err := os.WriteFile(m.configPath, exampleData, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to write config file: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Falling back to creating minimal default configuration.\n")
-		return m.createDefaultConfig()
-	}
-
-	fmt.Printf("Successfully copied example config from: %s\n", examplePath)
-
-	// Load the new config
-	if err := m.viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to load new config: %w", err)
-	}
-
-	// Unmarshal into struct
-	m.config = &Config{}
-	if err := m.viper.Unmarshal(m.config); err != nil {
-		return fmt.Errorf("failed to unmarshal new config: %w", err)
-	}
-
+	
 	return nil
+}
+
+// GenerateExampleConfigYAML creates a YAML string with the default configuration and detailed comments
+func (m *Manager) GenerateExampleConfigYAML() string {
+	var b strings.Builder
+	
+	b.WriteString("# arkeo Configuration Example\n")
+	b.WriteString("# Copy this file to ~/.config/arkeo/config.yaml and customize as needed\n\n")
+	
+	// App section
+	b.WriteString("# Application settings\n")
+	b.WriteString("app:\n")
+	b.WriteString("  # Date format for display (Go time format)\n")
+	b.WriteString("  date_format: \"2006-01-02\"\n\n")
+	b.WriteString("  # Application logging level (debug, info, warn, error)\n")
+	b.WriteString("  # Set to \"debug\" to enable detailed logging for connectors\n")
+	b.WriteString("  log_level: \"info\"\n\n\n")
+	
+	// Preferences section
+	b.WriteString("# User preferences configuration\n")
+	b.WriteString("# These settings control the application's behavior and appearance\n")
+	b.WriteString("preferences:\n")
+	b.WriteString("  # Display preferences\n")
+	b.WriteString("  # Control how timeline information is presented\n")
+	b.WriteString("  use_colors: true          # Use colors in terminal output\n")
+	b.WriteString("  show_details: false       # Show detailed information for activities\n")
+	b.WriteString("  show_progress: true       # Show progress bars during data fetching\n")
+	b.WriteString("  show_gaps: true           # Highlight time gaps in the timeline\n")
+	b.WriteString("  default_format: \"visual\"  # Default output format (visual, table, json, csv)\n\n")
+	b.WriteString("  # Timeline preferences\n")
+	b.WriteString("  # Control how timeline data is organized and displayed\n")
+	b.WriteString("  group_by_hour: false          # Group activities by hour\n")
+	b.WriteString("  max_items: 500                # Maximum number of items to display\n")
+	b.WriteString("  show_timeline: false          # Show visual timeline markers\n")
+	b.WriteString("  show_timestamps: true         # Show timestamps for each activity\n\n")
+	b.WriteString("  # Performance preferences\n")
+	b.WriteString("  # Control application performance characteristics\n")
+	b.WriteString("  parallel_fetch: true          # Fetch data from connectors in parallel\n")
+	b.WriteString("  fetch_timeout: 30             # Connector timeout in seconds\n\n\n")
+	
+	// Connectors section
+	b.WriteString("# Connector configurations\n")
+	b.WriteString("connectors:\n")
+	
+	// GitHub connector
+	b.WriteString("  # GitHub connector - fetches commits, issues, and PRs\n")
+	b.WriteString("  github:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # Get a personal access token from: https://github.com/settings/tokens\n")
+	b.WriteString("      # Requires 'repo' scope for private repos, 'public_repo' for public only\n")
+	b.WriteString("      token: \"ghp_your_github_token_here\"\n\n")
+	b.WriteString("      # Your GitHub username\n")
+	b.WriteString("      username: \"your-username\"\n\n")
+	b.WriteString("      # Include activities from private repositories\n")
+	b.WriteString("      include_private: false\n\n\n")
+	
+	// Calendar connector
+	b.WriteString("  # Google Calendar connector - fetches calendar events using secret iCal URLs\n")
+	b.WriteString("  calendar:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # Google Calendar secret iCal URLs (comma-separated)\n")
+	b.WriteString("      # Get these from: Google Calendar > Settings and sharing > Integrate calendar > Secret address in iCal format\n")
+	b.WriteString("      # Format: https://calendar.google.com/calendar/ical/[calendar-id]/[secret-key]/basic.ics\n")
+	b.WriteString("      ical_urls: \"https://calendar.google.com/calendar/ical/your-email@gmail.com/private-abc123def456/basic.ics\"\n\n")
+	b.WriteString("      # Include declined calendar events\n")
+	b.WriteString("      include_declined: false\n\n")
+	
+	// GitLab connector
+	b.WriteString("  # GitLab connector - fetches push events from GitLab API (all branches)\n")
+	b.WriteString("  gitlab:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # GitLab instance URL (defaults to https://gitlab.com)\n")
+	b.WriteString("      gitlab_url: \"https://gitlab.com\"\n\n")
+	b.WriteString("      # Your GitLab username\n")
+	b.WriteString("      username: \"your-username\"\n\n")
+	b.WriteString("      # GitLab personal access token from Profile > Access Tokens\n")
+	b.WriteString("      # Requires 'read_api' scope to access user events data\n")
+	b.WriteString("      access_token: \"your-gitlab-access-token\"\n\n")
+	
+	// YouTrack connector
+	b.WriteString("  # YouTrack connector - fetches activities and issue updates from YouTrack\n")
+	b.WriteString("  youtrack:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # YouTrack instance URL (e.g., https://mycompany.youtrack.cloud/)\n")
+	b.WriteString("      base_url: \"https://mycompany.youtrack.cloud/\"\n\n")
+	b.WriteString("      # YouTrack permanent token\n")
+	b.WriteString("      # Get from: Profile > Account Security > New token\n")
+	b.WriteString("      # Requires YouTrack scope permissions\n")
+	b.WriteString("      token: \"perm:your-youtrack-token-here\"\n\n")
+	b.WriteString("      # Username to filter activities for (optional, defaults to token owner)\n")
+	b.WriteString("      username: \"your-username\"\n\n")
+	
+	// macOS System connector
+	b.WriteString("  # macOS System Events connector - fetches screen lock/unlock events (macOS only)\n")
+	b.WriteString("  macos_system:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # Note: This connector uses the macOS 'log show' command to retrieve system events.\n")
+	b.WriteString("      # It specifically monitors loginwindow events for screen lock state changes for the full day (00:00:00 to 23:59:59).\n")
+	b.WriteString("      # When the screen is locked, it generates \"Computer is idle\" activities.\n")
+	b.WriteString("      # When the screen is unlocked, it generates \"Computer is active\" activities.\n")
+	b.WriteString("      # No additional configuration is required beyond enabling the connector.\n\n")
+	
+	return b.String()
 }
