@@ -598,7 +598,7 @@ func (cp *ConnectorProgress) PrintSummary() {
 
 	// Add extra space after progress bars if we used them
 	if cp.useProgressBars {
-		fmt.Println("\n") // Two newlines to ensure separation
+		fmt.Println() // Extra newline to ensure separation
 	}
 
 	totalActivities := 0
