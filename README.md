@@ -37,7 +37,7 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
 1. **Configure your first connector**:
    ```bash
    # Edit the configuration file
-   arkeo config edit
+   # Edit ~/.config/arkeo/config.yaml directly
 
    # Enable a connector
    arkeo connectors enable github
@@ -148,7 +148,7 @@ webhooks:
 
 ## Configuration
 
-arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly or use `arkeo config edit` to open it in your default editor.
+arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly with your preferred editor.
 
 ### Example Configuration
 See [config.example.yaml](config.example.yaml) for a complete configuration example.

@@ -10,30 +10,41 @@ import (
 
 	"github.com/arkeo/arkeo/internal/display"
 	"github.com/arkeo/arkeo/internal/timeline"
-	"github.com/arkeo/arkeo/internal/ui"
 	"github.com/arkeo/arkeo/internal/utils"
 )
 
 // timelineCmd shows the timeline for a specific date
 var timelineCmd = &cobra.Command{
-	Use:   "timeline",
+	Use:   "timeline [date]",
 	Short: "Show activity timeline for a date",
 	Long: `Display the activity timeline for a specific date.
-Activities are fetched from all enabled connectors and displayed in chronological order.`,
-	Run: runTimelineCommand,
+Activities are fetched from all enabled connectors and displayed in chronological order.
+
+If no date is provided, defaults to yesterday. Date format: YYYY-MM-DD`,
+	Args: cobra.MaximumNArgs(1),
+	Run:  runTimelineCommand,
 }
 
+var format string
+var maxItems int
+
 func init() {
-	// No timeline-specific flags - all settings are now configured via config file
+	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, csv)")
+	timelineCmd.Flags().IntVar(&maxItems, "max-items", 0, "Maximum number of activities to display (0 = unlimited)")
 }
 
 func runTimelineCommand(cmd *cobra.Command, args []string) {
-	// Parse date
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
+	// Parse date argument or default to yesterday
+	var dateStr string
+	if len(args) > 0 {
+		dateStr = args[0]
+	} else {
+		// Default to yesterday
+		yesterday := time.Now().AddDate(0, 0, -1)
+		dateStr = yesterday.Format("2006-01-02")
 	}
 
-	parsedDate, err := time.Parse("2006-01-02", date)
+	parsedDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid date format. Use YYYY-MM-DD: %v\n", err)
 		os.Exit(1)
@@ -42,8 +53,7 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 	// Initialize configuration and connectors
 	configManager, registry := initializeSystem()
-	config := configManager.GetConfig()
-	preferences := config.Preferences
+	_ = configManager.GetConfig() // Config may be used for other settings in the future
 
 	// Create timeline
 	tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
@@ -60,80 +70,17 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
 
-	// Initialize progress tracker if enabled
-	var progress *ui.ConnectorProgress
-	if preferences.ShowProgress {
-		progress = ui.NewConnectorProgress(preferences.UseColors)
-	}
-
-	// Convert connectors to utils.Connector interface and start progress tracking
+	// Convert connectors to utils.Connector interface
 	utilsConnectors := make(map[string]utils.Connector)
 	for name, conn := range enabledConnectors {
 		utilsConnectors[name] = conn
-		if progress != nil {
-			progress.StartConnector(name)
-		}
 	}
 
-	// Align progress bars after all connectors are added
-	if progress != nil {
-		progress.AlignProgressBars()
-	}
+	// Fetch activities from all connectors (always in parallel)
+	activities := utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
 
-	// Fetch activities from all connectors with progress tracking
-	var activities []timeline.Activity
-	if preferences.ParallelFetch {
-		if progress != nil {
-			// Use the new progress callback system
-			activities = utils.FetchActivitiesParallelWithProgress(ctx, utilsConnectors, targetDate,
-				func(connectorName, status string, current, total int, err error) {
-					if status == "connecting" {
-						// Already started in progress.StartConnector above
-					} else if status == "completed" {
-						if err == nil {
-							// Just update the progress bar to completion, don't finish yet
-							progress.UpdateConnector(connectorName, "", 1, 1)
-						} else {
-							progress.FinishConnector(connectorName, 0, err)
-						}
-					} else if status == "failed" {
-						progress.FinishConnector(connectorName, 0, err)
-					}
-				})
-
-			// Update final counts for all connectors
-			for name := range enabledConnectors {
-				connectorActivities := 0
-				for _, activity := range activities {
-					if activity.Source == name {
-						connectorActivities++
-					}
-				}
-				// Finish with the correct count if not already finished
-				if !progress.IsConnectorFinished(name) {
-					progress.FinishConnector(name, connectorActivities, nil)
-				}
-			}
-			progress.PrintSummary()
-		} else {
-			activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
-		}
-	} else {
-		// Sequential fetch (fallback if parallel is disabled)
-		activities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, false)
-		if progress != nil {
-			for name := range enabledConnectors {
-				connectorActivities := 0
-				for _, activity := range activities {
-					if activity.Source == name {
-						connectorActivities++
-					}
-				}
-				progress.FinishConnector(name, connectorActivities, nil)
-			}
-			progress.PrintSummary()
-		}
-	}
+	// Print completion message
+	fmt.Printf("Fetched %d activities from %d connector(s).\n", len(activities), len(enabledConnectors))
 
 	tl.AddActivitiesUnsorted(activities)
 	tl.EnsureSorted()
@@ -143,14 +90,9 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 	// Use enhanced display
 	enhancedOpts := display.EnhancedTimelineOptions{
 		TimelineOptions: display.TimelineOptions{
-			ShowDetails: preferences.ShowDetails,
-			GroupByHour: preferences.GroupByHour,
-			MaxItems:    preferences.MaxItems,
-			Format:      preferences.DefaultFormat,
+			MaxItems: maxItems, // Default is 0 (unlimited) set by flag
+			Format:   format,   // Default is "table" set by flag
 		},
-		UseColors:    preferences.UseColors,
-		ShowProgress: preferences.ShowProgress,
-		ShowGaps:     preferences.ShowGaps,
 	}
 
 	if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {

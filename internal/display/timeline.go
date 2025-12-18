@@ -11,19 +11,15 @@ import (
 
 // TimelineOptions controls how the timeline is displayed
 type TimelineOptions struct {
-	ShowDetails bool
-	GroupByHour bool
-	MaxItems    int
-	Format      string // "table", "json", "csv"
+	MaxItems int
+	Format   string // "table", "json", "csv"
 }
 
 // DefaultTimelineOptions returns sensible defaults for timeline display
 func DefaultTimelineOptions() TimelineOptions {
 	return TimelineOptions{
-		ShowDetails: false,
-		GroupByHour: false,
-		MaxItems:    500,
-		Format:      "table",
+		MaxItems: 500,
+		Format:   "table",
 	}
 }
 
@@ -57,11 +53,7 @@ func displayTable(tl *timeline.Timeline, activities []timeline.Activity, opts Ti
 	fmt.Printf("Timeline for %s\n", tl.Date.Format("Monday, January 2, 2006"))
 	fmt.Printf("Found %d activities\n\n", len(activities))
 
-	if opts.GroupByHour {
-		displayGroupedByHour(activities, opts)
-	} else {
-		displayChronological(activities, opts)
-	}
+	displayChronological(activities, opts)
 
 	return nil
 }
@@ -121,18 +113,18 @@ func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix st
 		activity.Source,
 		title)
 
-	// Show description if available and details requested
-	if opts.ShowDetails && activity.Description != "" {
+	// Show description only in JSON format
+	if opts.Format == "json" && activity.Description != "" {
 		fmt.Printf("%s   📝 %s\n", prefix, activity.Description)
 	}
 
-	// Show duration if available and details requested
-	if opts.ShowDetails && activity.Duration != nil {
+	// Show duration only in JSON format
+	if opts.Format == "json" && activity.Duration != nil {
 		fmt.Printf("%s   ⏱️  %s\n", prefix, activity.FormatDuration())
 	}
 
-	// Show URL if available and details requested
-	if opts.ShowDetails && activity.URL != "" {
+	// Show URL only in JSON format
+	if opts.Format == "json" && activity.URL != "" {
 		fmt.Printf("%s   🔗 %s\n", prefix, activity.URL)
 	}
 
@@ -145,12 +137,12 @@ func displayJSON(tl *timeline.Timeline, activities []timeline.Activity) error {
 		Date:       tl.Date,
 		Activities: activities,
 	}
-	
+
 	jsonData, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal timeline to JSON: %v", err)
 	}
-	
+
 	fmt.Print(string(jsonData))
 	return nil
 }

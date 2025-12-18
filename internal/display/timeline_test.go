@@ -14,15 +14,6 @@ import (
 func TestDefaultTimelineOptions(t *testing.T) {
 	opts := DefaultTimelineOptions()
 
-	if opts.ShowDetails {
-		t.Error("ShowDetails should be false by default")
-	}
-
-
-	if opts.GroupByHour {
-		t.Error("GroupByHour should be false by default")
-	}
-
 	if opts.MaxItems != 500 {
 		t.Errorf("Expected MaxItems to be 500, got %d", opts.MaxItems)
 	}
@@ -84,8 +75,10 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 
 func TestDisplayTimeline_WithDetails(t *testing.T) {
 	tl := createTestTimeline()
+
+	// Test that details are shown when format is JSON
 	opts := DefaultTimelineOptions()
-	opts.ShowDetails = true
+	opts.Format = "json"
 
 	output := captureOutput(func() {
 		err := DisplayTimeline(tl, opts)
@@ -94,45 +87,31 @@ func TestDisplayTimeline_WithDetails(t *testing.T) {
 		}
 	})
 
-	// Check for details
-	expectedStrings := []string{
+	// JSON format should include all details in the JSON structure
+	// The JSON output should contain the activity fields
+	if !strings.Contains(output, "description") && !strings.Contains(output, "Daily team meeting") {
+		t.Errorf("JSON output should contain activity details, got:\n%s", output)
+	}
+
+	// Test that details are NOT shown when format is table
+	opts.Format = "table"
+	output = captureOutput(func() {
+		err := DisplayTimeline(tl, opts)
+		if err != nil {
+			t.Errorf("DisplayTimeline failed: %v", err)
+		}
+	})
+
+	// Table format should NOT show details
+	unexpectedStrings := []string{
 		"📝 Daily team meeting",
 		"⏱️  30m",
 		"🔗 https://calendar.example.com/event/1",
-		"📝 Updated OAuth flow to handle edge cases",
-		"🔗 https://github.com/example/repo/commit/abc123",
 	}
 
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Output should contain %q when ShowDetails is true, got:\n%s", expected, output)
-		}
-	}
-}
-
-
-func TestDisplayTimeline_GroupByHour(t *testing.T) {
-	tl := createTestTimeline()
-	opts := DefaultTimelineOptions()
-	opts.GroupByHour = true
-
-	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
-		if err != nil {
-			t.Errorf("DisplayTimeline failed: %v", err)
-		}
-	})
-
-	// Check for hour groupings
-	expectedStrings := []string{
-		"📅 09:00 (1 activities)",
-		"📅 12:00 (1 activities)",
-		"📅 14:00 (1 activities)",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Output should contain %q when GroupByHour is true, got:\n%s", expected, output)
+	for _, unexpected := range unexpectedStrings {
+		if strings.Contains(output, unexpected) {
+			t.Errorf("Table format should NOT contain %q, got:\n%s", unexpected, output)
 		}
 	}
 }
@@ -211,7 +190,7 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 		`"calendar"`,
 		`"github"`,
 	}
-	
+
 	for _, expected := range expectedStrings {
 		if !strings.Contains(output, expected) {
 			t.Errorf("JSON output should contain %q, got: %s", expected, output)

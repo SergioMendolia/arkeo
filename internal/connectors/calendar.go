@@ -553,7 +553,7 @@ func (c *CalendarConnector) parseICalDateTimeWithTZ(value, tzid string) (time.Ti
 			// If timezone loading fails, treat as local time
 			loc = time.Local
 		}
-		
+
 		// If the parsed time doesn't have timezone info, assume it's in the specified timezone
 		if parsedTime.Location() == time.UTC && !strings.HasSuffix(value, "Z") {
 			parsedTime = time.Date(
@@ -562,13 +562,13 @@ func (c *CalendarConnector) parseICalDateTimeWithTZ(value, tzid string) (time.Ti
 				parsedTime.Nanosecond(), loc,
 			)
 		}
-		
+
 		// Convert to local timezone for display
 		parsedTime = parsedTime.In(time.Local)
-		
+
 		if c.isDebugMode() {
 			log.Printf("Calendar Debug: Parsed '%s' with TZID '%s' -> %s (local: %s)",
-				value, tzid, parsedTime.Format("2006-01-02 15:04:05 MST"), 
+				value, tzid, parsedTime.Format("2006-01-02 15:04:05 MST"),
 				parsedTime.In(time.Local).Format("2006-01-02 15:04:05 MST"))
 		}
 	} else if strings.HasSuffix(value, "Z") {
@@ -576,7 +576,7 @@ func (c *CalendarConnector) parseICalDateTimeWithTZ(value, tzid string) (time.Ti
 		parsedTime = parsedTime.In(time.Local)
 		if c.isDebugMode() {
 			log.Printf("Calendar Debug: Parsed UTC time '%s' -> %s (local: %s)",
-				value, parsedTime.UTC().Format("2006-01-02 15:04:05 UTC"), 
+				value, parsedTime.UTC().Format("2006-01-02 15:04:05 UTC"),
 				parsedTime.Format("2006-01-02 15:04:05 MST"))
 		}
 	} else {

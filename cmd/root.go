@@ -12,7 +12,6 @@ import (
 
 var (
 	configPath string
-	date       string
 )
 
 var version = "dev" // Will be set by SetVersion function
@@ -36,20 +35,18 @@ Features:
 • Export activity data in various formats
 
 Use the CLI commands to interact with the system and view your daily activities.`,
-	Example: `  # Show today's timeline
+	Example: `  # Show yesterday's timeline (default)
   arkeo timeline
 
   # Show timeline for a specific date
-  arkeo timeline --date 2023-12-25
+  arkeo timeline 2023-12-25
 
   # Show detailed timeline with all information
   arkeo timeline --details
 
   # List all connectors and their status
   arkeo connectors list
-
-  # Edit configuration
-  arkeo config edit`,
+`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -66,32 +63,12 @@ func init() {
 	// Disable the default completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	// Global flags
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default is $HOME/.config/arkeo/config.yaml)")
-	rootCmd.PersistentFlags().StringVar(&date, "date", "", "date for operations (default is today, format: YYYY-MM-DD)")
+	// No global flags
 
 	// Add subcommands
 	rootCmd.AddCommand(timelineCmd)
 	rootCmd.AddCommand(connectorsCmd)
-	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(versionCmd)
 }
-
-
-// Version command provides version information
-
-// versionCmd shows version information
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version information",
-	Long:  `Display version information for arkeo.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("arkeo %s\n", version)
-		fmt.Println("Daily Activity Timeline Builder")
-		fmt.Println("Built with ❤️  using Go and Cobra")
-	},
-}
-
 
 // initConfig reads in config file and ENV variables if set
 func initConfig() {
@@ -165,7 +142,7 @@ func getEnabledConnectors(configManager *config.Manager, registry *connectors.Co
 			// Add app-level settings as defaults
 			configWithAppSettings[connectors.CommonConfigKeys.LogLevel] = appConfig.App.LogLevel
 			configWithAppSettings[connectors.CommonConfigKeys.DateFormat] = appConfig.App.DateFormat
-			configWithAppSettings[connectors.CommonConfigKeys.Timeout] = appConfig.Preferences.FetchTimeout
+			configWithAppSettings[connectors.CommonConfigKeys.Timeout] = 30 // Always use 30 seconds
 
 			// Add debug mode if environment variable is set
 			if os.Getenv("ARKEO_DEBUG") != "" {
