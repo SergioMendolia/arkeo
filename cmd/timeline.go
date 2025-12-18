@@ -27,10 +27,12 @@ If no date is provided, defaults to yesterday. Date format: YYYY-MM-DD`,
 
 var format string
 var maxItems int
+var week bool
 
 func init() {
 	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, csv)")
 	timelineCmd.Flags().IntVar(&maxItems, "max-items", 0, "Maximum number of activities to display (0 = unlimited)")
+	timelineCmd.Flags().BoolVar(&week, "week", false, "Display activities for the entire work week (Monday-Friday) containing the selected date")
 }
 
 func runTimelineCommand(cmd *cobra.Command, args []string) {
@@ -55,9 +57,6 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 	configManager, registry := initializeSystem()
 	_ = configManager.GetConfig() // Config may be used for other settings in the future
 
-	// Create timeline
-	tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
-
 	// Fetch activities from enabled connectors
 	ctx := context.Background()
 	enabledConnectors := getEnabledConnectors(configManager, registry)
@@ -68,34 +67,97 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
-
 	// Convert connectors to utils.Connector interface
 	utilsConnectors := make(map[string]utils.Connector)
 	for name, conn := range enabledConnectors {
 		utilsConnectors[name] = conn
 	}
 
-	// Fetch activities from all connectors (always in parallel)
-	activities := utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, true)
+	var allActivities []timeline.Activity
+	var weekDays []time.Time
+	isMachineReadable := format == "json" || format == "csv"
+	verbose := !isMachineReadable
 
-	// Print completion message
-	fmt.Printf("Fetched %d activities from %d connector(s).\n", len(activities), len(enabledConnectors))
+	if week {
+		// Calculate Monday-Friday range for the week containing the selected date
+		weekday := targetDate.Weekday()
+		daysFromMonday := (int(weekday) - int(time.Monday) + 7) % 7
+		monday := targetDate.AddDate(0, 0, -daysFromMonday).Truncate(24 * time.Hour)
 
-	tl.AddActivitiesUnsorted(activities)
-	tl.EnsureSorted()
+		// Generate Monday-Friday dates
+		weekDays = make([]time.Time, 5)
+		for i := 0; i < 5; i++ {
+			weekDays[i] = monday.AddDate(0, 0, i)
+		}
 
-	fmt.Println()
+		if !isMachineReadable {
+			fmt.Printf("Fetching activities for week of %s (Monday-Friday)...\n", monday.Format("January 2, 2006"))
+		}
 
-	// Use enhanced display
+		// Fetch activities for each day in the week
+		for _, day := range weekDays {
+			dayActivities := utils.FetchActivitiesParallel(ctx, utilsConnectors, day, verbose)
+			allActivities = append(allActivities, dayActivities...)
+		}
+
+		if !isMachineReadable {
+			fmt.Printf("Fetched %d activities from %d connector(s) across %d days.\n", len(allActivities), len(enabledConnectors), len(weekDays))
+		}
+	} else {
+		// Single day mode
+		if !isMachineReadable {
+			fmt.Printf("Fetching activities for %s...\n", targetDate.Format("January 2, 2006"))
+		}
+		allActivities = utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, verbose)
+		if !isMachineReadable {
+			fmt.Printf("Fetched %d activities from %d connector(s).\n", len(allActivities), len(enabledConnectors))
+		}
+	}
+
+	// Create timeline(s) and add activities
+	if week {
+		// For week view, we'll pass activities grouped by day to the display function
+		// The display function will handle grouping
+	} else {
+		// Single day: create timeline with target date
+		tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
+		tl.AddActivitiesUnsorted(allActivities)
+		tl.EnsureSorted()
+
+		if !isMachineReadable {
+			fmt.Println()
+		}
+
+		// Use enhanced display
+		enhancedOpts := display.EnhancedTimelineOptions{
+			TimelineOptions: display.TimelineOptions{
+				MaxItems: maxItems, // Default is 0 (unlimited) set by flag
+				Format:   format,   // Default is "table" set by flag
+			},
+		}
+
+		if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {
+			fmt.Fprintf(os.Stderr, "Error displaying timeline: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Week view: group activities by day and display
+	if !isMachineReadable {
+		fmt.Println()
+	}
+
 	enhancedOpts := display.EnhancedTimelineOptions{
 		TimelineOptions: display.TimelineOptions{
 			MaxItems: maxItems, // Default is 0 (unlimited) set by flag
 			Format:   format,   // Default is "table" set by flag
 		},
+		WeekMode: true,
+		WeekDays: weekDays,
 	}
 
-	if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {
+	if err := display.DisplayEnhancedWeekTimeline(allActivities, enhancedOpts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error displaying timeline: %v\n", err)
 		os.Exit(1)
 	}
