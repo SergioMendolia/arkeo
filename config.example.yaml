@@ -1,5 +1,8 @@
 # arkeo Configuration Example
 # Copy this file to ~/.config/arkeo/config.yaml and customize as needed
+#
+# Note: Output formats (table, json, csv, taxi) and display options are controlled
+# via CLI flags (--format, --week, --max-items), not through this configuration file.
 
 # Application settings
 app:

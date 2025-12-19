@@ -57,9 +57,13 @@ This document provides comprehensive information for AI agents and developers wo
          ▼
 ┌─────────────────┐
 │    Display      │  (internal/display/)
-│  - Formatting   │
+│  - Timeline     │
+│  - Formatters   │
+│    - Table      │
+│    - JSON       │
+│    - CSV        │
+│    - Taxi       │
 │  - Colors       │
-│  - Progress     │
 └─────────────────┘
 ```
 
@@ -92,8 +96,13 @@ This document provides comprehensive information for AI agents and developers wo
 - Supports filtering by type, source, and time range
 
 #### 5. Display (`internal/display/`)
-- **`timeline.go`**: Basic timeline display
-- **`enhanced.go`**: Enhanced display with colors, gaps, grouping
+- **`timeline.go`**: Main timeline display logic, handles single day and week views
+- **`formatters/`**: Format-specific display implementations
+  - **`table.go`**: Table format with colors, time gaps, and activity details
+  - **`json.go`**: JSON format output
+  - **`csv.go`**: CSV format output
+  - **`taxi.go`**: Taxi format (timesheet format with quarter-hour rounding)
+- **`colors/`**: Color utilities for terminal output
 
 #### 6. Utilities (`internal/utils/`)
 - **`parallel.go`**: Parallel connector execution
@@ -122,8 +131,14 @@ arkeo/
 │   ├── timeline/          # Timeline data structures
 │   │   └── activity.go    # Activity and Timeline types
 │   ├── display/           # Display formatting
-│   │   ├── timeline.go    # Basic display
-│   │   └── enhanced.go    # Enhanced display
+│   │   ├── timeline.go    # Main display logic
+│   │   ├── formatters/    # Format-specific implementations
+│   │   │   ├── table.go   # Table format
+│   │   │   ├── json.go    # JSON format
+│   │   │   ├── csv.go     # CSV format
+│   │   │   └── taxi.go    # Taxi format
+│   │   └── colors/        # Color utilities
+│   │       └── colors.go
 │   └── utils/             # Utility functions
 │       ├── parallel.go    # Parallel execution
 │       └── http_pool.go   # HTTP utilities
@@ -239,6 +254,34 @@ type Connector interface {
 
 4. **Write tests** (`internal/connectors/myconnector_test.go`)
 
+### Adding a New Formatter
+
+1. **Create the formatter file** (`internal/display/formatters/myformat.go`):
+   ```go
+   package formatters
+   
+   import (
+       "fmt"
+       "github.com/arkeo/arkeo/internal/timeline"
+   )
+   
+   // DisplayMyFormat outputs timeline in custom format
+   func DisplayMyFormat(tl *timeline.Timeline, activities []timeline.Activity) error {
+       // Implementation here
+       return nil
+   }
+   ```
+
+2. **Register the formatter** in `internal/display/timeline.go`:
+   - Add case to `displaySingleDay()` switch statement
+   - Add case to `displayMultipleDays()` switch statement
+   - Add handler function for multiple days if needed
+
+3. **Update command flags** in `cmd/timeline.go`:
+   - Add format option to `--format` flag description
+
+4. **Write tests** (`internal/display/formatters/myformat_test.go`)
+
 ### Configuration Management
 
 - Configuration is stored in `~/.config/arkeo/config.yaml`
@@ -263,7 +306,7 @@ type Connector interface {
 
 ### Fetching Activities
 
-Activities are fetched in parallel by default (configurable via `preferences.parallel_fetch`):
+Activities are fetched in parallel by default:
 
 ```go
 // In cmd/timeline.go
@@ -273,14 +316,28 @@ activities := utils.FetchActivitiesParallel(ctx, utilsConnectors, targetDate, tr
 
 ### Displaying Timeline
 
+The display system uses a formatter pattern to support multiple output formats:
+
 ```go
-enhancedOpts := display.EnhancedTimelineOptions{
-    TimelineOptions: display.TimelineOptions{
-        MaxItems: preferences.MaxItems,
-        Format:   preferences.DefaultFormat,
-    },
+opts := display.TimelineOptions{
+    MaxItems: maxItems,
+    Format:   format,  // "table", "json", "csv", "taxi"
+    Dates:    []time.Time{targetDate},  // Single day or multiple for week view
 }
-display.DisplayEnhancedTimeline(tl, enhancedOpts)
+display.DisplayTimeline(activities, opts)
+```
+
+**Supported Formats:**
+- **table**: Default format with colors, time gaps, and activity details
+- **json**: Machine-readable JSON output
+- **csv**: Comma-separated values for spreadsheet import
+- **taxi**: Timesheet format with quarter-hour rounding
+
+**Week View:**
+Pass multiple dates to display a week view (Monday-Friday):
+```go
+opts.Dates = []time.Time{monday, tuesday, wednesday, thursday, friday}
+display.DisplayTimeline(allActivities, opts)
 ```
 
 ### Adding Configuration Fields
@@ -297,6 +354,41 @@ display.DisplayEnhancedTimeline(tl, enhancedOpts)
 - Use `fmt.Errorf()` with `%w` for error wrapping
 - Failed connectors don't stop the entire timeline fetch
 - Errors are logged but don't crash the application
+
+## Display Formats
+
+### Table Format (Default)
+- Human-readable format with colors and visual enhancements
+- Shows time gaps between activities (>1 hour)
+- Displays activity source, timestamp, and title
+- Includes duration if available
+- Supports detailed view with descriptions in JSON mode
+
+### JSON Format
+- Machine-readable JSON output
+- Full activity details including metadata
+- Suitable for integration with other tools
+- Supports both single day and week views
+
+### CSV Format
+- Comma-separated values for spreadsheet import
+- Includes all activity fields: timestamp, type, source, title, description, duration, URL
+- Proper CSV escaping for fields containing commas or quotes
+
+### Taxi Format
+- Timesheet format designed for time tracking systems
+- Rounds time ranges to quarter hours (00, 15, 30, 45)
+- Uses continuation format (`-HH:MM`) for consecutive activities
+- Default duration: 15 minutes per activity
+- Gap threshold: 30 minutes (activities within this gap are merged)
+- Project placeholder: `??` (for manual project assignment)
+- Format: `project HH:MM-HH:MM description` or `project -HH:MM description`
+
+**Taxi Format Features:**
+- Start times rounded down to previous quarter hour
+- End times rounded up to next quarter hour
+- Activities within 5 minutes of previous end time use continuation format
+- Description includes activity title and source: `Title (source)`
 
 ## Connector Details
 
@@ -339,15 +431,15 @@ app:
   log_level: "info"          # debug, info, warn, error
 ```
 
-### Preferences
-```yaml
-preferences:
-  use_colors: true           # Terminal colors
-  default_format: "table"     # table, json, csv
-  max_items: 500              # Max activities to show
-  parallel_fetch: true        # Parallel connector execution
-  fetch_timeout: 30           # Timeout in seconds
-```
+### Timeline Display Options
+
+Display options are controlled via CLI flags, not configuration:
+
+- **Format**: Set via `--format` flag (table, json, csv, taxi)
+- **Max Items**: Set via `--max-items` flag (0 = unlimited)
+- **Week View**: Enable via `--week` flag (Monday-Friday)
+
+**Note**: Format defaults to "table" if not specified. Parallel fetching is always enabled by default.
 
 ### Connector Configuration
 ```yaml
@@ -383,6 +475,7 @@ connectors:
 - Pre-allocate slices when size is known
 - Use `AddActivitiesUnsorted()` for bulk operations
 - Sort only when necessary
+- Formatters receive pre-sorted activities when possible
 
 ### Security
 - Never log API tokens or secrets

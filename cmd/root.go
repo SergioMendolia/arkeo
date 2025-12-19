@@ -41,8 +41,13 @@ Use the CLI commands to interact with the system and view your daily activities.
   # Show timeline for a specific date
   arkeo timeline 2023-12-25
 
-  # Show detailed timeline with all information
-  arkeo timeline --details
+  # Show activities for the entire work week
+  arkeo timeline --week
+
+  # Output in different formats
+  arkeo timeline --format json
+  arkeo timeline --format csv
+  arkeo timeline --format taxi
 
   # List all connectors and their status
   arkeo connectors list
