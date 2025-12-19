@@ -23,3 +23,4 @@ func DisplayJSON(tl *timeline.Timeline, activities []timeline.Activity) error {
 	fmt.Print(string(jsonData))
 	return nil
 }
+

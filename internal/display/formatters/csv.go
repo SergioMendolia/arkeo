@@ -39,3 +39,4 @@ func CSVEscape(field string) string {
 	}
 	return field
 }
+

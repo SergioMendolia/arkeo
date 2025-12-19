@@ -111,3 +111,4 @@ func DisplayTimeGap(gap time.Duration) {
 	gapStr := fmt.Sprintf("── %s gap ──", colors.FormatDuration(gap))
 	fmt.Printf("     %s\n", colors.Colorize(gapStr, colors.Gray))
 }
+

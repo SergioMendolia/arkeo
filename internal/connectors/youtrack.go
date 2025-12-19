@@ -511,7 +511,7 @@ func (y *YouTrackConnector) getActivities(ctx context.Context, date time.Time, u
 			} else if bodyStr == "" {
 				errorMsg = "youtrack API bad request (400). Common causes: invalid username, unsupported field names, incorrect date format, or missing activity categories"
 			}
-			return nil, fmt.Errorf(errorMsg)
+			return nil, fmt.Errorf("%s", errorMsg)
 		}
 		return nil, fmt.Errorf("youtrack activities API returned status %d: %s", resp.StatusCode, bodyStr)
 	}
