@@ -3,7 +3,6 @@ package display
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/arkeo/arkeo/internal/timeline"
@@ -43,6 +42,8 @@ func DisplayTimeline(tl *timeline.Timeline, opts TimelineOptions) error {
 		return displayJSON(tl, activities)
 	case "csv":
 		return displayCSV(activities, opts)
+	case "taxi":
+		return displayTaxi(tl, activities)
 	default:
 		return displayTable(tl, activities, opts)
 	}
@@ -56,34 +57,6 @@ func displayTable(tl *timeline.Timeline, activities []timeline.Activity, opts Ti
 	displayChronological(activities, opts)
 
 	return nil
-}
-
-// displayGroupedByHour groups activities by hour
-func displayGroupedByHour(activities []timeline.Activity, opts TimelineOptions) {
-	groups := make(map[string][]timeline.Activity)
-
-	for _, activity := range activities {
-		hour := activity.Timestamp.Format("15:00")
-		groups[hour] = append(groups[hour], activity)
-	}
-
-	// Sort hours
-	var hours []string
-	for hour := range groups {
-		hours = append(hours, hour)
-	}
-	sort.Strings(hours)
-
-	for _, hour := range hours {
-		activities := groups[hour]
-		fmt.Printf("📅 %s (%d activities)\n", hour, len(activities))
-		fmt.Println(strings.Repeat("─", 50))
-
-		for _, activity := range activities {
-			displayActivity(activity, opts, "  ")
-		}
-		fmt.Println()
-	}
 }
 
 // displayChronological shows activities in chronological order
@@ -178,34 +151,6 @@ func csvEscape(field string) string {
 		return "\"" + strings.ReplaceAll(field, "\"", "\"\"") + "\""
 	}
 	return field
-}
-
-// DisplaySummary shows a summary of the timeline
-func DisplaySummary(tl *timeline.Timeline) {
-	summary := tl.GetSummary()
-
-	fmt.Printf("Timeline Summary for %s\n", summary.Date.Format("January 2, 2006"))
-	fmt.Println(strings.Repeat("═", 40))
-
-	fmt.Printf("📊 Total Activities: %d\n", summary.TotalActivities)
-
-	if summary.TotalActivities > 0 {
-		fmt.Printf("⏰ Time Range: %s - %s\n",
-			summary.TimeRange.Start.Format("15:04"),
-			summary.TimeRange.End.Format("15:04"))
-
-		fmt.Println("\n📈 By Activity Type:")
-		for actType, count := range summary.ByType {
-			fmt.Printf("   %-15s %d\n", actType, count)
-		}
-
-		fmt.Println("\n🔗 By Source:")
-		for source, count := range summary.BySource {
-			fmt.Printf("   📋 %-15s %d\n", source, count)
-		}
-	}
-
-	fmt.Println()
 }
 
 // DisplayConnectorStatus shows the status of all connectors

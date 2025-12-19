@@ -198,63 +198,6 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 	}
 }
 
-func TestDisplaySummary(t *testing.T) {
-	tl := createTestTimeline()
-
-	output := captureOutput(func() {
-		DisplaySummary(tl)
-	})
-
-	expectedStrings := []string{
-		"Timeline Summary for January 15, 2024",
-		"📊 Total Activities: 3",
-		"⏰ Time Range: 09:00 - 14:30",
-		"📈 By Activity Type:",
-		"calendar        1",
-		"git_commit      2",
-		"🔗 By Source:",
-		"📋 calendar        1",
-		"📋 github          2",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Summary should contain %q, got:\n%s", expected, output)
-		}
-	}
-}
-
-func TestDisplaySummary_EmptyTimeline(t *testing.T) {
-	tl := timeline.NewTimeline(time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC))
-
-	output := captureOutput(func() {
-		DisplaySummary(tl)
-	})
-
-	expectedStrings := []string{
-		"Timeline Summary for January 15, 2024",
-		"📊 Total Activities: 0",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Empty summary should contain %q, got:\n%s", expected, output)
-		}
-	}
-
-	// Should not contain activity type or source sections for empty timeline
-	unexpectedStrings := []string{
-		"📈 By Activity Type:",
-		"🔗 By Source:",
-	}
-
-	for _, unexpected := range unexpectedStrings {
-		if strings.Contains(output, unexpected) {
-			t.Errorf("Empty summary should not contain %q, got:\n%s", unexpected, output)
-		}
-	}
-}
-
 func TestDisplayConnectorStatus(t *testing.T) {
 	connectors := map[string]bool{
 		"github":   true,

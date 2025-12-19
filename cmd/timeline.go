@@ -30,7 +30,7 @@ var maxItems int
 var week bool
 
 func init() {
-	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, csv)")
+	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, csv, taxi)")
 	timelineCmd.Flags().IntVar(&maxItems, "max-items", 0, "Maximum number of activities to display (0 = unlimited)")
 	timelineCmd.Flags().BoolVar(&week, "week", false, "Display activities for the entire work week (Monday-Friday) containing the selected date")
 }
@@ -75,7 +75,7 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 	var allActivities []timeline.Activity
 	var weekDays []time.Time
-	isMachineReadable := format == "json" || format == "csv"
+	isMachineReadable := format == "json" || format == "csv" || format == "taxi"
 	verbose := !isMachineReadable
 
 	if week {
