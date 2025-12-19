@@ -114,50 +114,26 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Create timeline(s) and add activities
-	if week {
-		// For week view, we'll pass activities grouped by day to the display function
-		// The display function will handle grouping
-	} else {
-		// Single day: create timeline with target date
-		tl := timeline.NewTimeline(targetDate.Truncate(24 * time.Hour))
-		tl.AddActivitiesUnsorted(allActivities)
-		tl.EnsureSorted()
-
-		if !isMachineReadable {
-			fmt.Println()
-		}
-
-		// Use enhanced display
-		enhancedOpts := display.EnhancedTimelineOptions{
-			TimelineOptions: display.TimelineOptions{
-				MaxItems: maxItems, // Default is 0 (unlimited) set by flag
-				Format:   format,   // Default is "table" set by flag
-			},
-		}
-
-		if err := display.DisplayEnhancedTimeline(tl, enhancedOpts); err != nil {
-			fmt.Fprintf(os.Stderr, "Error displaying timeline: %v\n", err)
-			os.Exit(1)
-		}
-		return
+	// Prepare display options
+	opts := display.TimelineOptions{
+		MaxItems: maxItems, // Default is 0 (unlimited) set by flag
+		Format:   format,   // Default is "table" set by flag
 	}
 
-	// Week view: group activities by day and display
+	if week {
+		// Week view: set dates to week days
+		opts.Dates = weekDays
+	} else {
+		// Single day: set dates to single date
+		opts.Dates = []time.Time{targetDate.Truncate(24 * time.Hour)}
+	}
+
 	if !isMachineReadable {
 		fmt.Println()
 	}
 
-	enhancedOpts := display.EnhancedTimelineOptions{
-		TimelineOptions: display.TimelineOptions{
-			MaxItems: maxItems, // Default is 0 (unlimited) set by flag
-			Format:   format,   // Default is "table" set by flag
-		},
-		WeekMode: true,
-		WeekDays: weekDays,
-	}
-
-	if err := display.DisplayEnhancedWeekTimeline(allActivities, enhancedOpts); err != nil {
+	// Use unified display (handles both single day and week)
+	if err := display.DisplayTimeline(allActivities, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error displaying timeline: %v\n", err)
 		os.Exit(1)
 	}
