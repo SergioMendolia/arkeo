@@ -44,7 +44,7 @@ var connectorsListCmd = &cobra.Command{
 		}
 		fmt.Println()
 		fmt.Println("💡 Enable a connector: arkeo connectors enable <name>")
-		fmt.Println("⚙️  Edit configuration: arkeo config edit")
+		fmt.Println("⚙️  Edit configuration: Edit ~/.config/arkeo/config.yaml")
 	},
 }
 
@@ -72,7 +72,7 @@ var connectorsEnableCmd = &cobra.Command{
 		}
 
 		fmt.Printf("✅ Enabled connector: %s\n", connectorName)
-		fmt.Println("💡 Configure it by editing the config file: arkeo config edit")
+		fmt.Println("💡 Configure it by editing ~/.config/arkeo/config.yaml")
 	},
 }
 
@@ -264,7 +264,7 @@ var connectorsTestCmd = &cobra.Command{
 		ctx := context.Background()
 		if err := connector.TestConnection(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Connection test failed: %v\n", err)
-			fmt.Println("💡 Check your configuration: arkeo config edit")
+			fmt.Println("💡 Check your configuration in ~/.config/arkeo/config.yaml")
 			os.Exit(1)
 		}
 

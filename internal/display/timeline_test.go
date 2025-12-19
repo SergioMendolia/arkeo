@@ -8,20 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arkeo/arkeo/internal/display/formatters"
 	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 func TestDefaultTimelineOptions(t *testing.T) {
 	opts := DefaultTimelineOptions()
-
-	if opts.ShowDetails {
-		t.Error("ShowDetails should be false by default")
-	}
-
-
-	if opts.GroupByHour {
-		t.Error("GroupByHour should be false by default")
-	}
 
 	if opts.MaxItems != 500 {
 		t.Errorf("Expected MaxItems to be 500, got %d", opts.MaxItems)
@@ -37,16 +29,17 @@ func TestDisplayTimeline_EmptyTimeline(t *testing.T) {
 	output := captureOutput(func() {
 		tl := timeline.NewTimeline(time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC))
 		opts := DefaultTimelineOptions()
+		opts.Dates = []time.Time{tl.Date}
 
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
 	})
 
-	expected := "No activities found for January 15, 2024\n"
-	if output != expected {
-		t.Errorf("Expected %q, got %q", expected, output)
+	// Output now includes ANSI color codes, so check for the text content
+	if !strings.Contains(output, "No activities found") || !strings.Contains(output, "January") {
+		t.Errorf("Expected output to contain 'No activities found' and 'January', got %q", output)
 	}
 }
 
@@ -54,9 +47,10 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 	tl := createTestTimeline()
 	opts := DefaultTimelineOptions()
 	opts.Format = "table"
+	opts.Dates = []time.Time{tl.Date}
 
 	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
@@ -65,7 +59,7 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 	// Check for expected content
 	expectedStrings := []string{
 		"Timeline for Monday, January 15, 2024",
-		"Found 3 activities",
+		"activities from",
 		"Activities (chronological order):",
 		"09:00",
 		"Morning standup (30m)",
@@ -84,55 +78,44 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 
 func TestDisplayTimeline_WithDetails(t *testing.T) {
 	tl := createTestTimeline()
+
+	// Test that details are shown when format is JSON
 	opts := DefaultTimelineOptions()
-	opts.ShowDetails = true
+	opts.Format = "json"
+	opts.Dates = []time.Time{tl.Date}
 
 	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
 	})
 
-	// Check for details
-	expectedStrings := []string{
+	// JSON format should include all details in the JSON structure
+	// The JSON output should contain the activity fields
+	if !strings.Contains(output, "description") && !strings.Contains(output, "Daily team meeting") {
+		t.Errorf("JSON output should contain activity details, got:\n%s", output)
+	}
+
+	// Test that details are NOT shown when format is table
+	opts.Format = "table"
+	output = captureOutput(func() {
+		err := DisplayTimeline(tl.Activities, opts)
+		if err != nil {
+			t.Errorf("DisplayTimeline failed: %v", err)
+		}
+	})
+
+	// Table format should NOT show details
+	unexpectedStrings := []string{
 		"📝 Daily team meeting",
 		"⏱️  30m",
 		"🔗 https://calendar.example.com/event/1",
-		"📝 Updated OAuth flow to handle edge cases",
-		"🔗 https://github.com/example/repo/commit/abc123",
 	}
 
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Output should contain %q when ShowDetails is true, got:\n%s", expected, output)
-		}
-	}
-}
-
-
-func TestDisplayTimeline_GroupByHour(t *testing.T) {
-	tl := createTestTimeline()
-	opts := DefaultTimelineOptions()
-	opts.GroupByHour = true
-
-	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
-		if err != nil {
-			t.Errorf("DisplayTimeline failed: %v", err)
-		}
-	})
-
-	// Check for hour groupings
-	expectedStrings := []string{
-		"📅 09:00 (1 activities)",
-		"📅 12:00 (1 activities)",
-		"📅 14:00 (1 activities)",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Output should contain %q when GroupByHour is true, got:\n%s", expected, output)
+	for _, unexpected := range unexpectedStrings {
+		if strings.Contains(output, unexpected) {
+			t.Errorf("Table format should NOT contain %q, got:\n%s", unexpected, output)
 		}
 	}
 }
@@ -141,21 +124,20 @@ func TestDisplayTimeline_MaxItems(t *testing.T) {
 	tl := createTestTimelineWithManyActivities()
 	opts := DefaultTimelineOptions()
 	opts.MaxItems = 2
+	opts.Dates = []time.Time{tl.Date}
 
 	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
 	})
 
-	// Should show only 2 activities
-	if strings.Contains(output, "Found 2 activities") {
-		// Count the number of activity entries
-		activityCount := strings.Count(output, "[calendar]") + strings.Count(output, "[github]") + strings.Count(output, "[jira]")
-		if activityCount > 2 {
-			t.Errorf("Should display at most 2 activities, but found %d", activityCount)
-		}
+	// Should show only 2 activities - check that we don't see all 5
+	// Count the number of activity entries (look for source labels)
+	activityCount := strings.Count(output, "calendar:") + strings.Count(output, "github:") + strings.Count(output, "jira:")
+	if activityCount > 2 {
+		t.Errorf("Should display at most 2 activities, but found %d", activityCount)
 	}
 }
 
@@ -163,9 +145,10 @@ func TestDisplayTimeline_CSVFormat(t *testing.T) {
 	tl := createTestTimeline()
 	opts := DefaultTimelineOptions()
 	opts.Format = "csv"
+	opts.Dates = []time.Time{tl.Date}
 
 	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
@@ -193,9 +176,10 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 	tl := createTestTimeline()
 	opts := DefaultTimelineOptions()
 	opts.Format = "json"
+	opts.Dates = []time.Time{tl.Date}
 
 	output := captureOutput(func() {
-		err := DisplayTimeline(tl, opts)
+		err := DisplayTimeline(tl.Activities, opts)
 		if err != nil {
 			t.Errorf("DisplayTimeline failed: %v", err)
 		}
@@ -211,67 +195,10 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 		`"calendar"`,
 		`"github"`,
 	}
-	
+
 	for _, expected := range expectedStrings {
 		if !strings.Contains(output, expected) {
 			t.Errorf("JSON output should contain %q, got: %s", expected, output)
-		}
-	}
-}
-
-func TestDisplaySummary(t *testing.T) {
-	tl := createTestTimeline()
-
-	output := captureOutput(func() {
-		DisplaySummary(tl)
-	})
-
-	expectedStrings := []string{
-		"Timeline Summary for January 15, 2024",
-		"📊 Total Activities: 3",
-		"⏰ Time Range: 09:00 - 14:30",
-		"📈 By Activity Type:",
-		"calendar        1",
-		"git_commit      2",
-		"🔗 By Source:",
-		"📋 calendar        1",
-		"📋 github          2",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Summary should contain %q, got:\n%s", expected, output)
-		}
-	}
-}
-
-func TestDisplaySummary_EmptyTimeline(t *testing.T) {
-	tl := timeline.NewTimeline(time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC))
-
-	output := captureOutput(func() {
-		DisplaySummary(tl)
-	})
-
-	expectedStrings := []string{
-		"Timeline Summary for January 15, 2024",
-		"📊 Total Activities: 0",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Empty summary should contain %q, got:\n%s", expected, output)
-		}
-	}
-
-	// Should not contain activity type or source sections for empty timeline
-	unexpectedStrings := []string{
-		"📈 By Activity Type:",
-		"🔗 By Source:",
-	}
-
-	for _, unexpected := range unexpectedStrings {
-		if strings.Contains(output, unexpected) {
-			t.Errorf("Empty summary should not contain %q, got:\n%s", unexpected, output)
 		}
 	}
 }
@@ -343,9 +270,9 @@ func TestCSVEscape(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := csvEscape(tt.input)
+			result := formatters.CSVEscape(tt.input)
 			if result != tt.expected {
-				t.Errorf("csvEscape(%q) = %q, expected %q", tt.input, result, tt.expected)
+				t.Errorf("CSVEscape(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
 		})
 	}

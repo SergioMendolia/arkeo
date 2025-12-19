@@ -4,222 +4,316 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
+	"time"
 
+	"github.com/arkeo/arkeo/internal/display/colors"
+	"github.com/arkeo/arkeo/internal/display/formatters"
 	"github.com/arkeo/arkeo/internal/timeline"
 )
 
 // TimelineOptions controls how the timeline is displayed
 type TimelineOptions struct {
-	ShowDetails bool
-	GroupByHour bool
-	MaxItems    int
-	Format      string // "table", "json", "csv"
+	MaxItems int
+	Format   string      // "table", "json", "csv", "taxi"
+	Dates    []time.Time // Empty or single date = single day mode, multiple dates = week mode
 }
 
 // DefaultTimelineOptions returns sensible defaults for timeline display
 func DefaultTimelineOptions() TimelineOptions {
 	return TimelineOptions{
-		ShowDetails: false,
-		GroupByHour: false,
-		MaxItems:    500,
-		Format:      "table",
+		MaxItems: 500,
+		Format:   "table",
+		Dates:    []time.Time{},
 	}
 }
 
 // DisplayTimeline renders a timeline to the console
-func DisplayTimeline(tl *timeline.Timeline, opts TimelineOptions) error {
-	if len(tl.Activities) == 0 {
-		fmt.Printf("No activities found for %s\n", tl.Date.Format("January 2, 2006"))
-		return nil
+// Handles both single day and multiple days based on opts.Dates
+func DisplayTimeline(activities []timeline.Activity, opts TimelineOptions) error {
+	// If no dates specified, return error (should have at least one date)
+	if len(opts.Dates) == 0 {
+		return fmt.Errorf("at least one date must be provided")
 	}
 
-	activities := tl.Activities
-
-	// Limit number of items
-	if opts.MaxItems > 0 && len(activities) > opts.MaxItems {
-		activities = activities[:opts.MaxItems]
+	// Single day mode
+	if len(opts.Dates) == 1 {
+		return displaySingleDay(activities, opts.Dates[0], opts)
 	}
 
-	// Display based on format
+	// Multiple days mode (week view)
+	return displayMultipleDays(activities, opts.Dates, opts)
+}
+
+// displaySingleDay handles display for a single day
+func displaySingleDay(activities []timeline.Activity, date time.Time, opts TimelineOptions) error {
+	// Filter activities for this date
+	dateStart := date.Truncate(24 * time.Hour)
+	dateEnd := dateStart.Add(24 * time.Hour)
+	dayActivities := filterActivitiesByDate(activities, dateStart, dateEnd)
+
+	// Apply max items limit
+	if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
+		dayActivities = dayActivities[:opts.MaxItems]
+	}
+
+	// Create timeline
+	tl := timeline.NewTimeline(dateStart)
+	tl.AddActivitiesUnsorted(dayActivities)
+	tl.EnsureSorted()
+
+	// Delegate to formatters based on format
 	switch opts.Format {
 	case "json":
-		return displayJSON(tl, activities)
+		return formatters.DisplayJSON(tl, dayActivities)
 	case "csv":
-		return displayCSV(activities, opts)
+		return formatters.DisplayCSV(dayActivities)
+	case "taxi":
+		return formatters.DisplayTaxi(tl, dayActivities)
 	default:
-		return displayTable(tl, activities, opts)
+		return formatters.DisplayTable(tl, dayActivities, opts.Format)
 	}
 }
 
-// displayTable shows the timeline in a formatted table
-func displayTable(tl *timeline.Timeline, activities []timeline.Activity, opts TimelineOptions) error {
-	fmt.Printf("Timeline for %s\n", tl.Date.Format("Monday, January 2, 2006"))
-	fmt.Printf("Found %d activities\n\n", len(activities))
+// displayMultipleDays handles display for multiple days (week view)
+func displayMultipleDays(activities []timeline.Activity, dates []time.Time, opts TimelineOptions) error {
+	// Group activities by day
+	activitiesByDay := groupActivitiesByDay(activities, dates)
 
-	if opts.GroupByHour {
-		displayGroupedByHour(activities, opts)
-	} else {
-		displayChronological(activities, opts)
+	// Handle different formats
+	switch opts.Format {
+	case "json":
+		return displayMultipleDaysJSON(activitiesByDay, dates, opts)
+	case "csv":
+		return displayMultipleDaysCSV(activitiesByDay, dates, opts)
+	case "taxi":
+		return displayMultipleDaysTaxi(activitiesByDay, dates, opts)
+	default:
+		return displayMultipleDaysTable(activitiesByDay, dates, opts)
 	}
-
-	return nil
 }
 
-// displayGroupedByHour groups activities by hour
-func displayGroupedByHour(activities []timeline.Activity, opts TimelineOptions) {
-	groups := make(map[string][]timeline.Activity)
+// displayMultipleDaysJSON outputs JSON for multiple days
+func displayMultipleDaysJSON(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
+	// Build map with dates as keys
+	result := make(map[string]*timeline.Timeline)
 
-	for _, activity := range activities {
-		hour := activity.Timestamp.Format("15:00")
-		groups[hour] = append(groups[hour], activity)
-	}
-
-	// Sort hours
-	var hours []string
-	for hour := range groups {
-		hours = append(hours, hour)
-	}
-	sort.Strings(hours)
-
-	for _, hour := range hours {
-		activities := groups[hour]
-		fmt.Printf("📅 %s (%d activities)\n", hour, len(activities))
-		fmt.Println(strings.Repeat("─", 50))
-
-		for _, activity := range activities {
-			displayActivity(activity, opts, "  ")
+	for _, date := range dates {
+		dayActivities := activitiesByDay[date]
+		if len(dayActivities) == 0 {
+			continue
 		}
-		fmt.Println()
-	}
-}
 
-// displayChronological shows activities in chronological order
-func displayChronological(activities []timeline.Activity, opts TimelineOptions) {
-	fmt.Println("Activities (chronological order):")
-	fmt.Println(strings.Repeat("═", 60))
+		// Apply max items limit per day
+		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
+			dayActivities = dayActivities[:opts.MaxItems]
+		}
 
-	for _, activity := range activities {
-		displayActivity(activity, opts, "")
+		// Sort activities for this day
+		sortActivitiesByTime(dayActivities)
 
-	}
-}
+		// Create timeline for this day
+		tl := timeline.NewTimeline(date.Truncate(24 * time.Hour))
+		tl.AddActivitiesUnsorted(dayActivities)
+		tl.EnsureSorted()
 
-// displayActivity shows a single activity
-func displayActivity(activity timeline.Activity, opts TimelineOptions, prefix string) {
-
-	// Build title with duration if available
-	title := activity.Title
-	if activity.Duration != nil {
-		title = fmt.Sprintf("%s (%s)", activity.Title, activity.FormatDuration())
+		// Use date as key (YYYY-MM-DD format)
+		dateKey := date.Format("2006-01-02")
+		result[dateKey] = tl
 	}
 
-	// Basic info line with timestamps (always shown)
-	fmt.Printf("%s%s [\033[90m%s\033[0m] %s\n",
-		prefix,
-		activity.Timestamp.Format("15:04"),
-		activity.Source,
-		title)
-
-	// Show description if available and details requested
-	if opts.ShowDetails && activity.Description != "" {
-		fmt.Printf("%s   📝 %s\n", prefix, activity.Description)
-	}
-
-	// Show duration if available and details requested
-	if opts.ShowDetails && activity.Duration != nil {
-		fmt.Printf("%s   ⏱️  %s\n", prefix, activity.FormatDuration())
-	}
-
-	// Show URL if available and details requested
-	if opts.ShowDetails && activity.URL != "" {
-		fmt.Printf("%s   🔗 %s\n", prefix, activity.URL)
-	}
-
-}
-
-// displayJSON outputs timeline as JSON
-func displayJSON(tl *timeline.Timeline, activities []timeline.Activity) error {
-	// Create a timeline copy with the limited activities
-	output := &timeline.Timeline{
-		Date:       tl.Date,
-		Activities: activities,
-	}
-	
-	jsonData, err := json.MarshalIndent(output, "", "  ")
+	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal timeline to JSON: %v", err)
 	}
-	
+
 	fmt.Print(string(jsonData))
 	return nil
 }
 
-// displayCSV outputs timeline as CSV
-func displayCSV(activities []timeline.Activity, opts TimelineOptions) error {
+// displayMultipleDaysCSV outputs CSV for multiple days
+func displayMultipleDaysCSV(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
 	// CSV header
-	fmt.Println("timestamp,type,source,title,description,duration,url")
+	fmt.Println("date,timestamp,type,source,title,description,duration,url")
 
-	for _, activity := range activities {
-		duration := ""
-		if activity.Duration != nil {
-			duration = activity.FormatDuration()
+	for _, date := range dates {
+		dayActivities := activitiesByDay[date]
+		if len(dayActivities) == 0 {
+			continue
 		}
 
-		fmt.Printf("%s,%s,%s,%s,%s,%s,%s\n",
-			activity.Timestamp.Format("2006-01-02 15:04:05"),
-			activity.Type,
-			activity.Source,
-			csvEscape(activity.Title),
-			csvEscape(activity.Description),
-			duration,
-			activity.URL,
-		)
+		// Apply max items limit per day
+		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
+			dayActivities = dayActivities[:opts.MaxItems]
+		}
+
+		// Sort activities for this day
+		sortActivitiesByTime(dayActivities)
+
+		// Output date line + CSV for each day
+		dateStr := date.Format("2006-01-02")
+		for _, activity := range dayActivities {
+			duration := ""
+			if activity.Duration != nil {
+				duration = activity.FormatDuration()
+			}
+
+			fmt.Printf("%s,%s,%s,%s,%s,%s,%s,%s\n",
+				dateStr,
+				activity.Timestamp.Format("2006-01-02 15:04:05"),
+				activity.Type,
+				activity.Source,
+				formatters.CSVEscape(activity.Title),
+				formatters.CSVEscape(activity.Description),
+				duration,
+				activity.URL,
+			)
+		}
 	}
 
 	return nil
 }
 
-// csvEscape escapes CSV fields
-func csvEscape(field string) string {
-	if strings.Contains(field, ",") || strings.Contains(field, "\"") || strings.Contains(field, "\n") {
-		return "\"" + strings.ReplaceAll(field, "\"", "\"\"") + "\""
+// displayMultipleDaysTaxi outputs taxi format for multiple days
+func displayMultipleDaysTaxi(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
+	for i, date := range dates {
+		dayActivities := activitiesByDay[date]
+		if len(dayActivities) == 0 {
+			continue // Skip empty days
+		}
+
+		// Apply max items limit per day
+		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
+			dayActivities = dayActivities[:opts.MaxItems]
+		}
+
+		// Sort activities for this day
+		sortActivitiesByTime(dayActivities)
+
+		// Create timeline for this day
+		tl := timeline.NewTimeline(date.Truncate(24 * time.Hour))
+		tl.AddActivitiesUnsorted(dayActivities)
+		tl.EnsureSorted()
+
+		// Output this day in taxi format (formatter already includes date header)
+		if err := formatters.DisplayTaxi(tl, dayActivities); err != nil {
+			return err
+		}
+
+		// Add blank line between days (except after last day)
+		if i < len(dates)-1 {
+			fmt.Println()
+		}
 	}
-	return field
+
+	return nil
 }
 
-// DisplaySummary shows a summary of the timeline
-func DisplaySummary(tl *timeline.Timeline) {
-	summary := tl.GetSummary()
+// displayMultipleDaysTable outputs table format for multiple days
+func displayMultipleDaysTable(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
+	// Display week header
+	if len(dates) > 0 {
+		monday := dates[0]
+		title := fmt.Sprintf("Timeline for Week of %s", monday.Format("Monday, January 2, 2006"))
+		fmt.Printf("%s\n", colors.Colorize(title, colors.Bold+colors.Blue))
 
-	fmt.Printf("Timeline Summary for %s\n", summary.Date.Format("January 2, 2006"))
-	fmt.Println(strings.Repeat("═", 40))
-
-	fmt.Printf("📊 Total Activities: %d\n", summary.TotalActivities)
-
-	if summary.TotalActivities > 0 {
-		fmt.Printf("⏰ Time Range: %s - %s\n",
-			summary.TimeRange.Start.Format("15:04"),
-			summary.TimeRange.End.Format("15:04"))
-
-		fmt.Println("\n📈 By Activity Type:")
-		for actType, count := range summary.ByType {
-			fmt.Printf("   %-15s %d\n", actType, count)
+		totalActivities := 0
+		for _, dayActivities := range activitiesByDay {
+			totalActivities += len(dayActivities)
 		}
 
-		fmt.Println("\n🔗 By Source:")
-		for source, count := range summary.BySource {
-			fmt.Printf("   📋 %-15s %d\n", source, count)
+		if totalActivities == 0 {
+			fmt.Printf("No activities found for the week.\n")
+			return nil
+		}
+
+		fmt.Printf("%s activities across %d days\n\n",
+			colors.Colorize(fmt.Sprintf("%d", totalActivities), colors.Bold),
+			len(dates))
+	}
+
+	// Display each day
+	for _, date := range dates {
+		dayActivities := activitiesByDay[date]
+		if len(dayActivities) == 0 {
+			continue
+		}
+
+		// Apply max items limit per day
+		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
+			dayActivities = dayActivities[:opts.MaxItems]
+		}
+
+		// Sort activities for this day
+		sortActivitiesByTime(dayActivities)
+
+		// Create timeline for this day
+		tl := timeline.NewTimeline(date.Truncate(24 * time.Hour))
+		tl.AddActivitiesUnsorted(dayActivities)
+		tl.EnsureSorted()
+
+		// Display this day (formatter handles header + timeline)
+		if err := formatters.DisplayTable(tl, dayActivities, opts.Format); err != nil {
+			return err
+		}
+
+		// Add blank line between days
+		fmt.Println()
+	}
+
+	return nil
+}
+
+// Helper functions
+
+// groupActivitiesByDay groups activities by their date (ignoring time)
+func groupActivitiesByDay(activities []timeline.Activity, dates []time.Time) map[time.Time][]timeline.Activity {
+	activitiesByDay := make(map[time.Time][]timeline.Activity)
+
+	// Initialize map with all dates
+	for _, date := range dates {
+		dateStart := date.Truncate(24 * time.Hour)
+		activitiesByDay[dateStart] = make([]timeline.Activity, 0)
+	}
+
+	// Group activities by day
+	for _, activity := range activities {
+		activityDate := activity.Timestamp.Truncate(24 * time.Hour)
+		// Find which date this activity belongs to
+		for _, date := range dates {
+			dateStart := date.Truncate(24 * time.Hour)
+			if activityDate.Equal(dateStart) {
+				activitiesByDay[dateStart] = append(activitiesByDay[dateStart], activity)
+				break
+			}
 		}
 	}
 
-	fmt.Println()
+	return activitiesByDay
+}
+
+// sortActivitiesByTime sorts activities by timestamp
+func sortActivitiesByTime(activities []timeline.Activity) {
+	sort.Slice(activities, func(i, j int) bool {
+		return activities[i].Timestamp.Before(activities[j].Timestamp)
+	})
+}
+
+// filterActivitiesByDate filters activities for a specific date range
+func filterActivitiesByDate(activities []timeline.Activity, start, end time.Time) []timeline.Activity {
+	filtered := make([]timeline.Activity, 0)
+	for _, activity := range activities {
+		activityDate := activity.Timestamp.Truncate(24 * time.Hour)
+		if !activityDate.Before(start) && activityDate.Before(end) {
+			filtered = append(filtered, activity)
+		}
+	}
+	return filtered
 }
 
 // DisplayConnectorStatus shows the status of all connectors
 func DisplayConnectorStatus(connectors map[string]bool) {
 	fmt.Println("Connector Status")
-	fmt.Println(strings.Repeat("═", 30))
+	fmt.Println("══════════════════════════════════")
 
 	for name, enabled := range connectors {
 		status := "❌ Disabled"

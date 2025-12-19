@@ -15,9 +15,6 @@ type Config struct {
 	// Application settings
 	App AppConfig `yaml:"app" mapstructure:"app"`
 
-	// User preferences
-	Preferences PreferencesConfig `yaml:"preferences" mapstructure:"preferences"`
-
 	// Connector configurations
 	Connectors map[string]ConnectorConfig `yaml:"connectors" mapstructure:"connectors"`
 }
@@ -40,66 +37,12 @@ type ConnectorConfig struct {
 	Config map[string]interface{} `yaml:"config" mapstructure:"config"`
 }
 
-// PreferencesConfig contains user preferences that are remembered across sessions
-type PreferencesConfig struct {
-	// Display preferences
-	UseColors     bool   `yaml:"use_colors" mapstructure:"use_colors"`
-	ShowDetails   bool   `yaml:"show_details" mapstructure:"show_details"`
-	ShowProgress  bool   `yaml:"show_progress" mapstructure:"show_progress"`
-	ShowGaps      bool   `yaml:"show_gaps" mapstructure:"show_gaps"`
-	DefaultFormat string `yaml:"default_format" mapstructure:"default_format"`
-
-	// Timeline preferences
-	GroupByHour bool `yaml:"group_by_hour" mapstructure:"group_by_hour"`
-	MaxItems    int  `yaml:"max_items" mapstructure:"max_items"`
-
-	// Performance preferences
-	ParallelFetch bool `yaml:"parallel_fetch" mapstructure:"parallel_fetch"`
-	FetchTimeout  int  `yaml:"fetch_timeout" mapstructure:"fetch_timeout"`
-}
-
-// Preference setter methods for direct config access
-func (m *Manager) SetUseColors(value bool) error {
-	m.config.Preferences.UseColors = value
-	return m.Save()
-}
-
-func (m *Manager) SetShowDetails(value bool) error {
-	m.config.Preferences.ShowDetails = value
-	return m.Save()
-}
-
-func (m *Manager) SetDefaultFormat(format string) error {
-	m.config.Preferences.DefaultFormat = format
-	return m.Save()
-}
-
-func (m *Manager) GetPreferences() *PreferencesConfig {
-	return &m.config.Preferences
-}
-
 // DefaultConfig returns a config with default values and comprehensive documentation
 func DefaultConfig() *Config {
 	return &Config{
 		App: AppConfig{
 			DateFormat: "2006-01-02", // Go time format for displaying dates
 			LogLevel:   "info",       // Application logging level (debug, info, warn, error)
-		},
-		Preferences: PreferencesConfig{
-			// Display preferences - control how timeline information is presented
-			UseColors:     true,    // Use colors in terminal output
-			ShowDetails:   false,   // Show detailed information for activities
-			ShowProgress:  true,    // Show progress bars during data fetching
-			ShowGaps:      true,    // Highlight time gaps in the timeline
-			DefaultFormat: "table", // Default output format (table, json, csv)
-
-			// Timeline preferences - control how timeline data is organized
-			GroupByHour: false, // Group activities by hour
-			MaxItems:    500,   // Maximum number of items to display
-
-			// Performance preferences - control application performance
-			ParallelFetch: true, // Fetch data from connectors in parallel
-			FetchTimeout:  30,   // Connector timeout in seconds
 		},
 		Connectors: map[string]ConnectorConfig{
 			"github": {
@@ -451,17 +394,6 @@ func (m *Manager) setDefaults() {
 	m.viper.SetDefault("app.date_format", defaults.App.DateFormat)
 	m.viper.SetDefault("app.log_level", defaults.App.LogLevel)
 
-	// Preferences defaults
-	prefs := defaults.Preferences
-	m.viper.SetDefault("preferences.use_colors", prefs.UseColors)
-	m.viper.SetDefault("preferences.show_details", prefs.ShowDetails)
-	m.viper.SetDefault("preferences.show_progress", prefs.ShowProgress)
-	m.viper.SetDefault("preferences.show_gaps", prefs.ShowGaps)
-	m.viper.SetDefault("preferences.default_format", prefs.DefaultFormat)
-	m.viper.SetDefault("preferences.group_by_hour", prefs.GroupByHour)
-	m.viper.SetDefault("preferences.max_items", prefs.MaxItems)
-	m.viper.SetDefault("preferences.parallel_fetch", prefs.ParallelFetch)
-	m.viper.SetDefault("preferences.fetch_timeout", prefs.FetchTimeout)
 }
 
 // createDefaultConfig creates a default configuration file
@@ -527,26 +459,6 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("  # Application logging level (debug, info, warn, error)\n")
 	b.WriteString("  # Set to \"debug\" to enable detailed logging for connectors\n")
 	b.WriteString("  log_level: \"info\"\n\n\n")
-
-	// Preferences section
-	b.WriteString("# User preferences configuration\n")
-	b.WriteString("# These settings control the application's behavior and appearance\n")
-	b.WriteString("preferences:\n")
-	b.WriteString("  # Display preferences\n")
-	b.WriteString("  # Control how timeline information is presented\n")
-	b.WriteString("  use_colors: true          # Use colors in terminal output\n")
-	b.WriteString("  show_details: false       # Show detailed information for activities\n")
-	b.WriteString("  show_progress: true       # Show progress bars during data fetching\n")
-	b.WriteString("  show_gaps: true           # Highlight time gaps in the timeline\n")
-	b.WriteString("  default_format: \"table\"  # Default output format (table, json, csv)\n\n")
-	b.WriteString("  # Timeline preferences\n")
-	b.WriteString("  # Control how timeline data is organized and displayed\n")
-	b.WriteString("  group_by_hour: false          # Group activities by hour\n")
-	b.WriteString("  max_items: 500                # Maximum number of items to display\n\n")
-	b.WriteString("  # Performance preferences\n")
-	b.WriteString("  # Control application performance characteristics\n")
-	b.WriteString("  parallel_fetch: true          # Fetch data from connectors in parallel\n")
-	b.WriteString("  fetch_timeout: 30             # Connector timeout in seconds\n\n\n")
 
 	// Connectors section
 	b.WriteString("# Connector configurations\n")

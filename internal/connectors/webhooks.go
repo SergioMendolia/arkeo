@@ -20,10 +20,10 @@ type WebhooksConnector struct {
 
 // WebhookConfig represents a single webhook configuration
 type WebhookConfig struct {
-	Name                 string `json:"name"`                   // Display name for activities from this webhook
-	URL                  string `json:"url"`                    // Webhook endpoint URL
-	Token                string `json:"token"`                  // Bearer token for authentication
-	SkipTLSVerification  bool   `json:"skip_tls_verification"`  // Skip TLS certificate verification
+	Name                string `json:"name"`                  // Display name for activities from this webhook
+	URL                 string `json:"url"`                   // Webhook endpoint URL
+	Token               string `json:"token"`                 // Bearer token for authentication
+	SkipTLSVerification bool   `json:"skip_tls_verification"` // Skip TLS certificate verification
 }
 
 // WebhookActivity represents an activity returned by a webhook
@@ -230,7 +230,7 @@ func (w *WebhooksConnector) getHTTPClientForWebhook(webhook WebhookConfig) *http
 		}
 		return utils.GetHTTPClient(config)
 	}
-	
+
 	// Use default secure client
 	return utils.GetDefaultHTTPClient()
 }
@@ -239,7 +239,7 @@ func (w *WebhooksConnector) getHTTPClientForWebhook(webhook WebhookConfig) *http
 func (w *WebhooksConnector) testSingleWebhook(ctx context.Context, webhook WebhookConfig) error {
 	// Use a recent date for testing (yesterday)
 	testDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	
+
 	reqURL := fmt.Sprintf("%s?date=%s", webhook.URL, testDate)
 	req, err := w.CreateBearerRequest(ctx, "GET", reqURL, webhook.Token)
 	if err != nil {
@@ -254,7 +254,7 @@ func (w *WebhooksConnector) testSingleWebhook(ctx context.Context, webhook Webho
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -267,7 +267,7 @@ func (w *WebhooksConnector) testSingleWebhook(ctx context.Context, webhook Webho
 // fetchActivitiesFromWebhook fetches activities from a single webhook
 func (w *WebhooksConnector) fetchActivitiesFromWebhook(ctx context.Context, webhook WebhookConfig, dateStr string) ([]timeline.Activity, error) {
 	reqURL := fmt.Sprintf("%s?date=%s", webhook.URL, dateStr)
-	
+
 	if w.IsDebugMode() {
 		fmt.Printf("Fetching activities from webhook: %s (%s)\n", webhook.Name, reqURL)
 	}
@@ -285,7 +285,7 @@ func (w *WebhooksConnector) fetchActivitiesFromWebhook(ctx context.Context, webh
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)

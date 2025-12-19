@@ -8,7 +8,8 @@ The tool is designed to answer the question "What the hell did I do on that day?
 
 - 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events, custom webhooks and more
 - 📅 **Daily Timeline**: View all your activities in chronological order
-
+- 📊 **Multiple Output Formats**: Table, JSON, CSV, and Taxi (timesheet) formats
+- 📆 **Week View**: Display activities for an entire work week (Monday-Friday)
 - ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
 - 🔒 **Secure Storage**: API tokens and sensitive data stored locally
 
@@ -37,7 +38,7 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
 1. **Configure your first connector**:
    ```bash
    # Edit the configuration file
-   arkeo config edit
+   # Edit ~/.config/arkeo/config.yaml directly
 
    # Enable a connector
    arkeo connectors enable github
@@ -45,14 +46,23 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
 
 2. **View your timeline**:
    ```bash
-   # Show today's activities
+   # Show yesterday's activities (default)
    arkeo timeline
 
-   # Show detailed timeline
-   arkeo timeline --details
-
    # Show timeline for specific date
-   arkeo timeline --date 2023-12-25
+   arkeo timeline 2023-12-25
+
+   # Show activities for the entire work week (Monday-Friday)
+   arkeo timeline --week
+
+   # Output in different formats
+   arkeo timeline --format json    # JSON output
+   arkeo timeline --format csv     # CSV output
+   arkeo timeline --format taxi    # Taxi format (timesheet format)
+   arkeo timeline --format table   # Table format (default)
+
+   # Limit number of activities shown
+   arkeo timeline --max-items 100
    ```
 
 
@@ -146,9 +156,35 @@ webhooks:
 
 
 
+## Output Formats
+
+Arkeo supports multiple output formats for different use cases:
+
+- **table** (default): Human-readable formatted table with colors and time gaps
+- **json**: Machine-readable JSON format for integration with other tools
+- **csv**: Comma-separated values for spreadsheet import
+- **taxi**: Timesheet format with time ranges rounded to quarter hours, suitable for time tracking systems
+
+### Taxi Format
+
+The taxi format is designed for timesheet entry. It:
+- Rounds time ranges to quarter hours (00, 15, 30, 45)
+- Groups activities into time blocks
+- Uses continuation format (`-HH:MM`) when activities are consecutive
+- Includes project placeholder (`??`) for manual project assignment
+
+Example taxi output:
+```
+25/12/2023
+
+??         09:00-09:15 Commit: Fix bug in API (github)
+??         -09:30 Review PR #123 (github)
+??         10:00-10:30 Team standup (calendar)
+```
+
 ## Configuration
 
-arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly or use `arkeo config edit` to open it in your default editor.
+arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly with your preferred editor.
 
 ### Example Configuration
 See [config.example.yaml](config.example.yaml) for a complete configuration example.

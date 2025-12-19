@@ -1,5 +1,8 @@
 # arkeo Configuration Example
 # Copy this file to ~/.config/arkeo/config.yaml and customize as needed
+#
+# Note: Output formats (table, json, csv, taxi) and display options are controlled
+# via CLI flags (--format, --week, --max-items), not through this configuration file.
 
 # Application settings
 app:
@@ -9,28 +12,6 @@ app:
   # Application logging level (debug, info, warn, error)
   # Set to "debug" to enable detailed logging for connectors
   log_level: "info"
-
-
-# User preferences configuration
-# These settings control the application's behavior and appearance
-preferences:
-  # Display preferences
-  # Control how timeline information is presented
-  use_colors: true          # Use colors in terminal output
-  show_details: false       # Show detailed information for activities
-  show_progress: true       # Show progress bars during data fetching
-  show_gaps: true           # Highlight time gaps in the timeline
-  default_format: "table"   # Default output format (table, json, csv)
-
-  # Timeline preferences
-  # Control how timeline data is organized and displayed
-  group_by_hour: false          # Group activities by hour
-  max_items: 500                # Maximum number of items to display
-
-  # Performance preferences
-  # Control application performance characteristics
-  parallel_fetch: true          # Fetch data from connectors in parallel
-  fetch_timeout: 30             # Connector timeout in seconds
 
 
 # Connector configurations
@@ -112,10 +93,8 @@ connectors:
         - name: "My Service"                              # Display name for activities
           url: "https://api.myservice.com/activities"     # Webhook endpoint URL
           token: "your-bearer-token-here"                # Bearer token for authentication
-          skip_tls_verification: false                   # Skip TLS certificate verification (default: false)
         # Add more webhooks as needed:
         # - name: "Another Service"
         #   url: "https://api.another.com/events"
         #   token: "another-token"
-        #   skip_tls_verification: true                  # Useful for self-signed certificates
 
