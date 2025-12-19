@@ -3,9 +3,9 @@ module github.com/arkeo/arkeo
 go 1.21.0
 
 require (
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/viper v1.20.1
-	golang.org/x/term v0.29.0
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/viper v1.21.0
+	golang.org/x/term v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
