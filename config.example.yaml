@@ -1,8 +1,5 @@
 # arkeo Configuration Example
 # Copy this file to ~/.config/arkeo/config.yaml and customize as needed
-#
-# Note: Output formats (table, json, csv, taxi) and display options are controlled
-# via CLI flags (--format, --week, --max-items), not through this configuration file.
 
 # Application settings
 app:
@@ -97,4 +94,27 @@ connectors:
         # - name: "Another Service"
         #   url: "https://api.another.com/events"
         #   token: "another-token"
+
+  # Browser History connector - fetches browsing history from Chrome/Chromium and Firefox
+  browser_history:
+    enabled: false
+    config:
+      # Which browsers to scan (comma-separated: chrome, firefox)
+      browsers: "chrome,firefox"
+
+      # Domains to exclude from the timeline (comma-separated)
+      # Use 'arkeo browser domains' to interactively manage this list
+      exclude_domains: "google.com,localhost,127.0.0.1"
+
+      # Group visits to the same domain within N minutes into one activity
+      group_window_minutes: 5
+
+      # Minimum visit count to show a domain (0 = show all)
+      min_visits: 1
+
+      # Chrome profile directory name (default: Default)
+      chrome_profile: "Default"
+
+      # Firefox profile directory name (auto-detected if empty)
+      firefox_profile: ""
 

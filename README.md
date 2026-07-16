@@ -6,12 +6,13 @@ The tool is designed to answer the question "What the hell did I do on that day?
 
 ## Features
 
-- 🔗 **Multiple Connectors**: Connect to GitHub, GitLab, Google Calendar, YouTrack, macOS system events, custom webhooks and more
-- 📅 **Daily Timeline**: View all your activities in chronological order
-- 📊 **Multiple Output Formats**: Table, JSON, CSV, and Taxi (timesheet) formats
-- 📆 **Week View**: Display activities for an entire work week (Monday-Friday)
-- ⚙️ **Easy Configuration**: Manage connectors through YAML configuration
-- 🔒 **Secure Storage**: API tokens and sensitive data stored locally
+- **Multiple Connectors**: GitHub, GitLab, Google Calendar, YouTrack, macOS system events, browser history (Chrome/Chromium/Firefox), and custom webhooks
+- **Daily Timeline**: View all your activities in chronological order, one activity per line
+- **Output Formats**: Table (default, with colors) and JSON (metadata-free)
+- **Date Ranges**: Single day, work week (Mon-Fri), or arbitrary date ranges (e.g. last 6 months)
+- **Activity Caching**: Past days are cached in a local SQLite database for instant re-display
+- **Browser Domain Manager**: Interactive TUI to browse visited domains and manage exclusions
+- **Easy Configuration**: Manage connectors through YAML configuration
 
 ## Installation
 
@@ -37,10 +38,8 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
 
 1. **Configure your first connector**:
    ```bash
-   # Edit the configuration file
    # Edit ~/.config/arkeo/config.yaml directly
-
-   # Enable a connector
+   # Then enable a connector
    arkeo connectors enable github
    ```
 
@@ -49,196 +48,119 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
    # Show yesterday's activities (default)
    arkeo timeline
 
-   # Show timeline for specific date
-   arkeo timeline 2023-12-25
+   # Show timeline for a specific date
+   arkeo timeline 2024-01-15
 
    # Show activities for the entire work week (Monday-Friday)
    arkeo timeline --week
 
-   # Output in different formats
-   arkeo timeline --format json    # JSON output
-   arkeo timeline --format csv     # CSV output
-   arkeo timeline --format taxi    # Taxi format (timesheet format)
-   arkeo timeline --format table   # Table format (default)
+   # Fetch the last 6 months of history
+   arkeo timeline --range 180
+
+   # Output in JSON format
+   arkeo timeline --format json
 
    # Limit number of activities shown
    arkeo timeline --max-items 100
    ```
 
+3. **Manage browser domain exclusions**:
+   ```bash
+   # Interactive TUI to browse domains and toggle exclusions
+   arkeo browser domains
 
+   # Plain table output (for scripting)
+   arkeo browser domains --no-tui
+
+   # Scan a specific time range
+   arkeo browser domains --days 30
+   ```
 
 ## Available Connectors
 
 ### GitHub Connector
-Fetches your commits, issues, and pull request activities.
+Fetches your commits, issues, and pull request activities from GitHub.
 
 ### GitLab Connector
-Fetches user activities from GitLab.
+Fetches user activities from GitLab (push events, merge requests, issues, comments).
 
 ### Google Calendar
-Retrieves calendar events and meetings.
+Retrieves calendar events and meetings via iCal URLs.
 
 ### YouTrack Connector
-Fetches activities and issue updates from YouTrack.
+Fetches activities and issue updates from YouTrack. Issue summaries are included in activity titles (e.g. `Updated State to Review in ZBR-7696: Infomaniak outage...`).
 
 ### macOS System Events Connector
-Fetches screen lock/unlock events on macOS systems using system logs. This connector:
-- Monitors when your computer becomes idle (screen locks)
-- Tracks when your computer becomes active (screen unlocks)
-- Only works on macOS systems
-- Requires no additional configuration beyond enabling it
-- Uses the macOS `log show` command to retrieve loginwindow events
+Fetches screen lock/unlock events on macOS systems using system logs. Only works on macOS.
 
-**Activities Generated:**
-- "Computer is idle" - when the screen is locked
-- "Computer is active" - when the screen is unlocked
+### Browser History Connector
+Fetches browsing history from Chrome/Chromium and Firefox. Visits to the same domain within a configurable time window are grouped into a single activity. Subdomains are normalized (e.g. `docs.github.com` → `github.com`).
+
+Use `arkeo browser domains` to interactively manage which domains to exclude from the timeline.
 
 ### Webhooks Connector
-Fetches activities from custom HTTP webhook endpoints. This connector allows you to integrate any service that can provide activity data via HTTP API.
-
-**Features:**
-- Support for multiple webhook endpoints
-- Bearer token authentication
-- Configurable display names for each webhook source
-- Flexible activity data format
-- Error resilience (continues with other webhooks if one fails)
-
-**Configuration:**
-Each webhook requires:
-- `name`: Display name for activities from this webhook
-- `url`: HTTP endpoint URL 
-- `token`: Bearer token for authentication
-
-**API Contract:**
-Arkeo calls your webhook with: `GET {url}?date=YYYY-MM-DD`
-
-Your webhook should respond with JSON array of activities:
-```json
-[
-  {
-    "timestamp": "2023-12-25T10:30:00Z",
-    "title": "Completed task XYZ",
-    "description": "Optional detailed description",
-    "type": "task",
-    "metadata": {
-      "project": "MyProject",
-      "priority": "high"
-    }
-  }
-]
-```
-
-**Activity Fields:**
-- `timestamp` (required): ISO 8601 timestamp (RFC3339 format preferred)
-- `title` (required): Activity title/summary
-- `description` (optional): Detailed description
-- `type` (optional): Activity type (defaults to "webhook")
-- `metadata` (optional): Additional key-value data
-
-**Supported timestamp formats:**
-- `2023-12-25T10:30:00Z` (RFC3339 - preferred)
-- `2023-12-25T10:30:00+01:00` (RFC3339 with timezone)
-- `2023-12-25 10:30:00` (Simple format)
-
-**Example Configuration:**
-```yaml
-webhooks:
-  enabled: true
-  config:
-    webhooks:
-      - name: "JIRA Tasks"
-        url: "https://api.mycompany.com/jira-activities"
-        token: "Bearer-token-for-jira-api"
-      - name: "Time Tracker"
-        url: "https://timetracker.mycompany.com/api/activities"
-        token: "another-bearer-token"
-```
-
-
+Fetches activities from custom HTTP webhook endpoints. Each webhook is called with `GET {url}?date=YYYY-MM-DD` and should return a JSON array of activities.
 
 ## Output Formats
 
-Arkeo supports multiple output formats for different use cases:
+- **table** (default): Human-readable format with colors, time gaps, and one activity per line. Each line shows: `HH:MM  SRC  Title — Description`. Long lines are truncated with `…`.
+- **json**: Machine-readable JSON format. Metadata is excluded from the output.
 
-- **table** (default): Human-readable formatted table with colors and time gaps
-- **json**: Machine-readable JSON format for integration with other tools
-- **csv**: Comma-separated values for spreadsheet import
-- **taxi**: Timesheet format with time ranges rounded to quarter hours, suitable for time tracking systems
+## Caching
 
-### Taxi Format
+Arkeo caches fetched activities in a local SQLite database at `~/.config/arkeo/cache.db`. Once a day has been fetched from connectors, subsequent runs load instantly from cache.
 
-The taxi format is designed for timesheet entry. It:
-- Rounds time ranges to quarter hours (00, 15, 30, 45)
-- Groups activities into time blocks
-- Uses continuation format (`-HH:MM`) when activities are consecutive
-- Includes project placeholder (`??`) for manual project assignment
+```bash
+# Normal run (uses cache for past days)
+arkeo timeline --range 180
 
-Example taxi output:
-```
-25/12/2023
+# Force re-fetch by clearing cache for the date range
+arkeo timeline --range 180 --reset-cache
 
-??         09:00-09:15 Commit: Fix bug in API (github)
-??         -09:30 Review PR #123 (github)
-??         10:00-10:30 Team standup (calendar)
+# Skip cache entirely (always fetch, don't store)
+arkeo timeline --no-cache
 ```
 
 ## Configuration
 
-arkeo stores configuration in `~/.config/arkeo/config.yaml`. You can edit this file directly with your preferred editor.
+Arkeo stores configuration in `~/.config/arkeo/config.yaml` (XDG_CONFIG_HOME is respected). Edit this file directly with your preferred editor.
 
 ### Example Configuration
-See [config.example.yaml](config.example.yaml) for a complete configuration example.
 
+See [config.example.yaml](config.example.yaml) for a complete configuration example with all connectors.
+
+## Commands
+
+```
+arkeo timeline [date]           # Show activity timeline for a date
+arkeo connectors list            # List all available connectors
+arkeo connectors enable <name>  # Enable a connector
+arkeo connectors disable <name> # Disable a connector
+arkeo connectors info <name>    # Show connector info and config
+arkeo connectors test <name>    # Test a connector's connection
+arkeo browser domains            # Interactive domain manager (TUI)
+```
+
+### Timeline Flags
+
+| Flag | Description |
+|------|-------------|
+| `--format` | Output format: `table` (default) or `json` |
+| `--week` | Show the work week (Mon-Fri) containing the selected date |
+| `--range N` | Fetch the last N days ending at the selected date |
+| `--max-items N` | Maximum activities to display (0 = unlimited) |
+| `--reset-cache` | Clear cached activities for the selected date range |
+| `--no-cache` | Skip cache (always fetch from connectors) |
+
+### Browser Domains Flags
+
+| Flag | Description |
+|------|-------------|
+| `--days N` | Number of days of history to scan (default: 90) |
+| `--browser` | Browser to scan: `chrome`, `firefox`, or `all` (default: `all`) |
+| `--no-tui` | Output plain table without interactive TUI |
 
 ## Development
-
-### Adding Custom Connectors
-
-Create a new connector by implementing the `Connector` interface:
-
-```go
-package connectors
-
-import (
-    "context"
-    "time"
-    "github.com/arkeo/arkeo/internal/timeline"
-)
-
-type MyConnector struct {
-    *BaseConnector
-}
-
-func NewMyConnector() *MyConnector {
-    return &MyConnector{
-        BaseConnector: NewBaseConnector(
-            "myservice",
-            "Fetches data from My Service",
-        ),
-    }
-}
-
-func (c *MyConnector) GetRequiredConfig() []ConfigField {
-    return []ConfigField{
-        {
-            Key:         "api_key",
-            Type:        "secret",
-            Required:    true,
-            Description: "API key for My Service",
-        },
-    }
-}
-
-func (c *MyConnector) GetActivities(ctx context.Context, date time.Time) ([]timeline.Activity, error) {
-    // Implement your connector logic here
-    return []timeline.Activity{}, nil
-}
-```
-
-Then register it in `cmd/root.go`:
-```go
-registry.Register(NewMyConnector())
-```
 
 ### Building
 
@@ -246,19 +168,28 @@ registry.Register(NewMyConnector())
 # Build for current platform
 go build -o arkeo .
 
-# Build all packages
-go build ./...
+# Build all packages (must work with CGO disabled)
+CGO_ENABLED=0 go build ./...
 
 # Run tests
 go test ./...
 
 # Run vet + tests (matches CI)
 go vet ./... && go test -race ./...
-
-# Create a release (tag-driven, handled by GitHub Actions)
-git tag v1.0.0
-git push origin v1.0.0
 ```
+
+### Adding Custom Connectors
+
+Create a new connector by implementing the `Connector` interface in `internal/connectors/`, then register it in `cmd/root.go`:
+
+```go
+availableConnectors := []connectors.Connector{
+    // ...
+    connectors.NewMyConnector(),
+}
+```
+
+Also add the default config to `internal/config/config.go` in `DefaultConfig()` and `GenerateExampleConfigYAML()`.
 
 ## Troubleshooting
 
@@ -266,44 +197,28 @@ git push origin v1.0.0
 
 1. **"No connectors are enabled"**
    - Enable connectors: `arkeo connectors enable <name>`
-   - Check configuration: `arkeo config show`
 
 2. **"Connection test failed"**
-   - Verify API tokens and credentials
+   - Verify API tokens and credentials in `~/.config/arkeo/config.yaml`
    - Test connection: `arkeo connectors test <name>`
 
 3. **"No activities found"**
-   - Check date range: activities are fetched for the specific date
+   - Check that the date has activity
    - Verify connector is properly configured
-   - Test connector connection
-
-
+   - Try `--reset-cache` to force re-fetch
 
 ### Debug Mode
 
-Enable debug logging:
-```yaml
-app:
-  log_level: "debug"
-```
+Enable debug logging by setting `log_level: "debug"` in config or `ARKEO_DEBUG=1` environment variable.
 
 ## Creating a Release
+
 ```bash
-# Tag a new version
 git tag v1.0.0
 git push origin v1.0.0
-
-# GitHub Actions will automatically:
-# 1. Run all tests
-# 2. Build multi-platform binaries
-# 3. Create release archives
-# 4. Publish GitHub release
 ```
 
-The release will include binaries for:
-- Linux (AMD64, ARM64)
-- macOS (Intel, Apple Silicon)
-- Windows (AMD64)
+GitHub Actions will automatically run tests, build cross-platform binaries (CGO_ENABLED=0), and publish a GitHub release.
 
 ## License
 
