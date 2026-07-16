@@ -20,7 +20,7 @@ The tool is designed to answer the question "What the hell did I do on that day?
 ```bash
 git clone https://github.com/sergiomendolia/arkeo.git
 cd arkeo
-make build
+go build -o arkeo .
 ```
 
 ### Using Go Install
@@ -244,19 +244,20 @@ registry.Register(NewMyConnector())
 
 ```bash
 # Build for current platform
-make build
+go build -o arkeo .
 
-# Build for all platforms
-make build-all
+# Build all packages
+go build ./...
 
 # Run tests
-make test
+go test ./...
 
-# Run all checks (format, vet, test)
-make check
+# Run vet + tests (matches CI)
+go vet ./... && go test -race ./...
 
-# Create release package
-make release
+# Create a release (tag-driven, handled by GitHub Actions)
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## Troubleshooting
