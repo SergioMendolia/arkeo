@@ -1,0 +1,79 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Browser Domains</h1>
+  <p>Manage which domains are excluded from the timeline</p>
+</div>
+
+<div class="card">
+  <div class="form-row">
+    <div class="form-group">
+      <label for="days">Days to scan</label>
+      <input type="text" id="days" value="{{.Days}}" style="width:80px">
+    </div>
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button class="primary" onclick="loadDomains()">Scan</button>
+    </div>
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button onclick="saveExclusions()">Save Exclusions</button>
+    </div>
+  </div>
+</div>
+
+<div id="domain-results">
+  <div class="timeline-empty">Click Scan to load browser history domains.</div>
+</div>
+
+<script>
+var domains = [];
+
+function loadDomains() {
+  var days = document.getElementById('days').value || '90';
+  var results = document.getElementById('domain-results');
+  results.innerHTML = '<div class="timeline-empty"><span class="spinner"></span> Scanning browser history...</div>';
+
+  fetch('/api/browser/domains?days=' + days)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { results.innerHTML = '<div class="timeline-empty" style="color:var(--red)">' + data.error + '</div>'; return; }
+      domains = data.domains || [];
+      renderDomains(results);
+    })
+    .catch(function() { results.innerHTML = '<div class="timeline-empty" style="color:var(--red)">Error loading domains</div>'; });
+}
+
+function renderDomains(container) {
+  if (domains.length === 0) { container.innerHTML = '<div class="timeline-empty">No domains found.</div>'; return; }
+  var html = '<div class="card"><h2>' + domains.length + ' domains found</h2>';
+  domains.forEach(function(d, i) {
+    html += '<div class="domain-row">';
+    html += '<span class="domain-name">' + escapeHtml(d.domain) + '</span>';
+    html += '<span class="domain-count">' + d.visit_count + ' visits · ' + d.page_count + ' pages</span>';
+    html += '<button class="domain-toggle ' + (d.excluded ? 'on' : '') + '" onclick="toggleDomain(' + i + ', this)"></button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleDomain(idx, btn) {
+  domains[idx].excluded = !domains[idx].excluded;
+  if (domains[idx].excluded) { btn.classList.add('on'); } else { btn.classList.remove('on'); }
+}
+
+function saveExclusions() {
+  var excluded = domains.filter(function(d){return d.excluded}).map(function(d){return d.domain});
+  fetch('/api/browser/exclusions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domains:excluded})})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { showToast(data.error, 'error'); return; }
+      showToast(data.message, 'success');
+    })
+    .catch(function() { showToast('Error saving', 'error'); });
+}
+
+function escapeHtml(s) { var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function showToast(msg, type) { var t=document.getElementById('toast'); t.textContent=msg; t.className='toast show '+(type||''); setTimeout(function(){t.className='toast'},3000); }
+</script>
+{{end}}

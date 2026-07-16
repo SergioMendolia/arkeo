@@ -406,9 +406,9 @@ func (g *GitLabConnector) convertEventToActivity(event GitLabEvent) *timeline.Ac
 
 	// Handle different event types
 	switch event.ActionName {
-	case "pushed to":
+	case "pushed to", "pushed new", "deleted":
 		return g.convertPushEventToActivity(event, eventTime)
-	case "opened", "merged", "closed":
+	case "opened", "merged", "closed", "accepted", "updated":
 		if event.TargetType != nil && *event.TargetType == "MergeRequest" {
 			return g.convertMergeRequestEventToActivity(event, eventTime)
 		} else if event.TargetType != nil && *event.TargetType == "Issue" {
@@ -432,37 +432,67 @@ func (g *GitLabConnector) convertEventToActivity(event GitLabEvent) *timeline.Ac
 	return g.convertGenericEventToActivity(event, eventTime)
 }
 
-// convertPushEventToActivity converts a GitLab push event to a timeline activity
+// convertPushEventToActivity converts a GitLab push event to a timeline activity.
+// Handles "pushed to" (normal push), "pushed new" (new branch), and "deleted" (branch/tag deletion).
 func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
 	if event.PushData == nil {
 		return nil
 	}
 
-	// Use commit title from push data or generate a default
-	title := strings.TrimSpace(event.PushData.CommitTitle)
-	if title == "" {
-		if event.PushData.CommitCount == 1 {
-			title = fmt.Sprintf("Pushed 1 commit to %s", event.PushData.Ref)
+	var title, description string
+
+	switch event.ActionName {
+	case "deleted":
+		// Branch or tag was deleted
+		refName := event.PushData.Ref
+		if event.PushData.RefType == "branch" {
+			title = fmt.Sprintf("Deleted branch %s", refName)
+		} else if event.PushData.RefType == "tag" {
+			title = fmt.Sprintf("Deleted tag %s", refName)
 		} else {
-			title = fmt.Sprintf("Pushed %d commits to %s", event.PushData.CommitCount, event.PushData.Ref)
+			title = fmt.Sprintf("Deleted %s %s", event.PushData.RefType, refName)
 		}
-	}
+		if event.Project != nil {
+			description = fmt.Sprintf("Deleted %s %s in %s", event.PushData.RefType, refName, event.Project.PathWithNamespace)
+		} else {
+			description = fmt.Sprintf("Deleted %s %s", event.PushData.RefType, refName)
+		}
 
-	// Create description
-	var description string
-	if event.Project != nil {
-		description = fmt.Sprintf("Pushed to %s branch in %s", event.PushData.Ref, event.Project.PathWithNamespace)
-	} else {
-		description = fmt.Sprintf("Pushed to %s branch", event.PushData.Ref)
-	}
+	case "pushed new":
+		// Push to a new branch
+		title = strings.TrimSpace(event.PushData.CommitTitle)
+		if title == "" {
+			title = fmt.Sprintf("Pushed to new branch %s", event.PushData.Ref)
+		}
+		if event.Project != nil {
+			description = fmt.Sprintf("Pushed %d commit(s) to new branch %s in %s", event.PushData.CommitCount, event.PushData.Ref, event.Project.PathWithNamespace)
+		} else {
+			description = fmt.Sprintf("Pushed %d commit(s) to new branch %s", event.PushData.CommitCount, event.PushData.Ref)
+		}
 
-	if event.PushData.CommitCount > 1 {
-		description += fmt.Sprintf(" (%d commits)", event.PushData.CommitCount)
+	default: // "pushed to"
+		// Use commit title from push data or generate a default
+		title = strings.TrimSpace(event.PushData.CommitTitle)
+		if title == "" {
+			if event.PushData.CommitCount == 1 {
+				title = fmt.Sprintf("Pushed 1 commit to %s", event.PushData.Ref)
+			} else {
+				title = fmt.Sprintf("Pushed %d commits to %s", event.PushData.CommitCount, event.PushData.Ref)
+			}
+		}
+		if event.Project != nil {
+			description = fmt.Sprintf("Pushed to %s branch in %s", event.PushData.Ref, event.Project.PathWithNamespace)
+		} else {
+			description = fmt.Sprintf("Pushed to %s branch", event.PushData.Ref)
+		}
+		if event.PushData.CommitCount > 1 {
+			description += fmt.Sprintf(" (%d commits)", event.PushData.CommitCount)
+		}
 	}
 
 	// Generate URL - try to link to the commits
 	var activityURL string
-	if event.Project != nil && event.PushData.CommitTo != "" {
+	if event.Project != nil && event.PushData.CommitTo != "" && event.ActionName != "deleted" {
 		if event.PushData.CommitCount == 1 {
 			// Single commit - link to commit
 			activityURL = fmt.Sprintf("%s/-/commit/%s", event.Project.WebURL, event.PushData.CommitTo)
@@ -496,18 +526,28 @@ func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTim
 	}
 }
 
-// convertMergeRequestEventToActivity converts a GitLab merge request event to a timeline activity
+// convertMergeRequestEventToActivity converts a GitLab merge request event to a timeline activity.
+// Handles "opened", "merged", "closed", "accepted", and "updated" actions.
 func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
-	title := event.ActionName + " merge request"
+	// Normalize action names for display
+	action := event.ActionName
+	switch action {
+	case "accepted":
+		action = "merged"
+	case "updated":
+		action = "updated"
+	}
+
+	title := action + " merge request"
 	if event.TargetTitle != nil {
-		title = fmt.Sprintf("%s merge request: %s", capitalizeFirst(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
+		title = fmt.Sprintf("%s merge request: %s", capitalizeFirst(action), g.stripHTMLTags(*event.TargetTitle))
 	}
 
 	var description string
 	if event.Project != nil {
-		description = fmt.Sprintf("%s merge request in %s", capitalizeFirst(event.ActionName), event.Project.PathWithNamespace)
+		description = fmt.Sprintf("%s merge request in %s", capitalizeFirst(action), event.Project.PathWithNamespace)
 	} else {
-		description = fmt.Sprintf("%s merge request", capitalizeFirst(event.ActionName))
+		description = fmt.Sprintf("%s merge request", capitalizeFirst(action))
 	}
 
 	if event.TargetIID != nil {
@@ -546,7 +586,8 @@ func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, 
 	}
 }
 
-// convertIssueEventToActivity converts a GitLab issue event to a timeline activity
+// convertIssueEventToActivity converts a GitLab issue event to a timeline activity.
+// Handles "opened", "closed", "created", and "updated" actions.
 func (g *GitLabConnector) convertIssueEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
 	action := event.ActionName
 	if action == "created" {
@@ -733,7 +774,9 @@ func (g *GitLabConnector) convertGenericEventToActivity(event GitLabEvent, event
 		description = capitalizeFirst(event.ActionName)
 	}
 
-	if event.TargetType != nil {
+	// Only show target type if it's meaningful (not "project" which just
+	// means the event belongs to a project, not that a project was the target).
+	if event.TargetType != nil && *event.TargetType != "Project" {
 		description += fmt.Sprintf(" (%s)", strings.ToLower(*event.TargetType))
 	}
 

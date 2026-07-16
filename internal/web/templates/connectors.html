@@ -1,0 +1,132 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Connectors</h1>
+  <p>Enable, disable, test, and configure your activity connectors</p>
+</div>
+
+<div class="card">
+  <h2>Available Connectors</h2>
+  {{range .Connectors}}
+  <div class="connector-row">
+    <div>
+      <div class="connector-name">{{.Name}}</div>
+      <div class="connector-desc">{{.Description}}</div>
+    </div>
+    <div class="connector-actions">
+      <span class="connector-status {{if .Enabled}}enabled{{else}}disabled{{end}}">
+        {{if .Enabled}}✅ Enabled{{else}}❌ Disabled{{end}}
+      </span>
+      {{if .Enabled}}
+      <button class="danger" onclick="toggleConnector('{{.Name}}', false)">Disable</button>
+      {{else}}
+      <button class="primary" onclick="toggleConnector('{{.Name}}', true)">Enable</button>
+      {{end}}
+      <button onclick="testConnector('{{.Name}}', this)">Test</button>
+      <button onclick="toggleConfig('{{.Name}}')">Settings</button>
+    </div>
+  </div>
+  <div id="config-{{.Name}}" class="connector-config" style="display:none">
+    <div style="padding:0.5rem 0">
+      <span class="spinner"></span> Loading settings...
+    </div>
+  </div>
+  {{end}}
+</div>
+
+<script>
+function toggleConnector(name, enable) {
+  var action = enable ? 'enable' : 'disable';
+  fetch('/api/connectors/' + action + '?name=' + name, {method:'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { showToast(data.error, 'error'); return; }
+      showToast(data.message, 'success');
+      setTimeout(function(){ location.reload(); }, 800);
+    })
+    .catch(function() { showToast('Error', 'error'); });
+}
+
+function testConnector(name, btn) {
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span>';
+  fetch('/api/connectors/test?name=' + name, {method:'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = orig;
+      if (data.error) { showToast(name + ': ' + data.error, 'error'); }
+      else { showToast(name + ': connection successful', 'success'); }
+    })
+    .catch(function() { btn.disabled=false; btn.textContent=orig; showToast('Error','error'); });
+}
+
+function toggleConfig(name) {
+  var panel = document.getElementById('config-' + name);
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    loadConfig(name, panel);
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function loadConfig(name, panel) {
+  fetch('/api/connectors/config?name=' + name)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { panel.innerHTML = '<div style="padding:0.5rem 0;color:var(--red)">' + data.error + '</div>'; return; }
+      var fields = data.fields || {};
+      var html = '<div style="padding:0.5rem 0;border-top:1px solid var(--border)">';
+      var hasFields = false;
+      for (var key in fields) {
+        if (!fields.hasOwnProperty(key)) continue;
+        hasFields = true;
+        var val = fields[key] || '';
+        var isSecret = (data.secret_fields && data.secret_fields.indexOf(key) >= 0);
+        var displayVal = isSecret && val ? '********' : val;
+        var inputType = isSecret ? 'password' : 'text';
+        html += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">';
+        html += '<label style="min-width:160px;margin:0;font-size:0.8rem">' + key + '</label>';
+        html += '<input type="' + inputType + '" id="cfg-' + name + '-' + key + '" value="' + escapeAttr(displayVal) + '" style="flex:1" data-original="' + (isSecret && val ? '********' : escapeAttr(val)) + '">';
+        html += '</div>';
+      }
+      if (!hasFields) {
+        html += '<p style="color:var(--text-muted);font-size:0.85rem">No configurable settings for this connector.</p>';
+      } else {
+        html += '<button class="primary" onclick="saveConfig(\'' + name + '\')" style="margin-top:0.5rem">Save Settings</button>';
+      }
+      html += '</div>';
+      panel.innerHTML = html;
+    })
+    .catch(function() { panel.innerHTML = '<div style="padding:0.5rem 0;color:var(--red)">Error loading config</div>'; });
+}
+
+function saveConfig(name) {
+  var panel = document.getElementById('config-' + name);
+  var inputs = panel.querySelectorAll('input[id^="cfg-' + name + '-"]');
+  var values = {};
+  inputs.forEach(function(input) {
+    var key = input.id.replace('cfg-' + name + '-', '');
+    // Skip if password field still shows ******** (unchanged)
+    if (input.type === 'password' && input.value === '********') return;
+    values[key] = input.value;
+  });
+
+  fetch('/api/connectors/config?name=' + name, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({config: values})
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { showToast(data.error, 'error'); return; }
+      showToast('Settings saved', 'success');
+    })
+    .catch(function() { showToast('Error saving', 'error'); });
+}
+
+function escapeAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function showToast(msg, type) { var t=document.getElementById('toast'); t.textContent=msg; t.className='toast show '+(type||''); setTimeout(function(){t.className='toast'},3000); }
+</script>
+{{end}}

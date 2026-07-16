@@ -1,0 +1,142 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>Timeline</h1>
+  <p>View activities from all enabled connectors</p>
+</div>
+
+<div class="card">
+  <div class="form-row">
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button onclick="prevDay()">◀ Prev</button>
+    </div>
+    <div class="form-group">
+      <label for="date">Date</label>
+      <input type="date" id="date" value="{{.Date}}">
+    </div>
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button onclick="nextDay()">Next ▶</button>
+    </div>
+    <div class="form-group">
+      <label for="format">Format</label>
+      <select id="format" style="width:100px">
+        <option value="table" {{if eq .Format "table"}}selected{{end}}>Table</option>
+        <option value="json" {{if eq .Format "json"}}selected{{end}}>JSON</option>
+      </select>
+    </div>
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button class="primary" onclick="loadTimeline()">Load</button>
+    </div>
+    <div class="form-group" style="flex:0">
+      <label>&nbsp;</label>
+      <button onclick="resetCache()">Reset Cache</button>
+    </div>
+  </div>
+</div>
+
+<div id="timeline-results">
+  <div class="timeline-empty">Loading...</div>
+</div>
+
+<script>
+(function() {
+  // Auto-load on page entry
+  loadTimeline();
+})();
+
+function updateURL() {
+  var date = document.getElementById('date').value;
+  var format = document.getElementById('format').value;
+  var url = '/?date=' + date + '&format=' + format;
+  history.pushState({date: date, format: format}, '', url);
+}
+
+function loadTimeline() {
+  var date = document.getElementById('date').value;
+  var format = document.getElementById('format').value;
+  var results = document.getElementById('timeline-results');
+  results.innerHTML = '<div class="timeline-empty"><span class="spinner"></span> Loading...</div>';
+  updateURL();
+
+  fetch('/api/timeline?date=' + date + '&format=' + format)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { results.innerHTML = '<div class="timeline-empty" style="color:var(--red)">' + data.error + '</div>'; return; }
+      if (format === 'json') {
+        results.innerHTML = '<div class="card"><pre style="white-space:pre-wrap;font-size:0.8rem;color:var(--text-muted)">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre></div>';
+        return;
+      }
+      renderTable(data, results);
+    })
+    .catch(function(err) { results.innerHTML = '<div class="timeline-empty" style="color:var(--red)">Error: ' + err + '</div>'; });
+}
+
+function prevDay() {
+  var d = document.getElementById('date');
+  var date = new Date(d.value);
+  date.setDate(date.getDate() - 1);
+  d.value = date.toISOString().split('T')[0];
+  loadTimeline();
+}
+
+function nextDay() {
+  var d = document.getElementById('date');
+  var date = new Date(d.value);
+  date.setDate(date.getDate() + 1);
+  d.value = date.toISOString().split('T')[0];
+  loadTimeline();
+}
+
+function renderTable(data, container) {
+  if (!data.days || data.days.length === 0) {
+    container.innerHTML = '<div class="timeline-empty">No activities found.</div>';
+    return;
+  }
+  var html = '';
+  var prevEnd = null;
+  data.days.forEach(function(day) {
+    html += '<div class="timeline-day-header">' + day.date_display + '</div>';
+    html += '<div class="timeline-day-stats">' + day.count + ' activities';
+    if (day.span) html += ' · span: ' + day.span;
+    if (day.cached) html += ' · (cached)';
+    html += '</div>';
+    if (day.activities.length === 0) { html += '<div class="timeline-empty">No activities for this day.</div>'; return; }
+    day.activities.forEach(function(a) {
+      if (prevEnd && a.gap) html += '<div class="timeline-gap">── ' + a.gap + ' gap ──</div>';
+      html += '<div class="timeline-entry">';
+      html += '<span class="timeline-time">' + a.time + '</span>';
+      html += '<span class="timeline-source">' + a.source_label + '</span>';
+      html += '<span class="timeline-text">' + escapeHtml(a.title);
+      if (a.description) html += ' <span class="desc">— ' + escapeHtml(a.description) + '</span>';
+      html += '</span>';
+      if (a.duration) html += '<span class="timeline-duration">' + a.duration + '</span>';
+      html += '</div>';
+      prevEnd = a.time;
+    });
+  });
+  container.innerHTML = html;
+}
+
+function resetCache() {
+  var date = document.getElementById('date').value;
+  fetch('/api/cache/reset?date=' + date + '&range=1', {method:'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) { showToast(data.message || 'Cache cleared', 'success'); loadTimeline(); })
+    .catch(function() { showToast('Error clearing cache', 'error'); });
+}
+
+function escapeHtml(s) { var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function showToast(msg, type) { var t=document.getElementById('toast'); t.textContent=msg; t.className='toast show '+(type||''); setTimeout(function(){t.className='toast'},3000); }
+
+// Handle browser back/forward
+window.addEventListener('popstate', function(e) {
+  if (e.state && e.state.date) {
+    document.getElementById('date').value = e.state.date;
+    if (e.state.format) document.getElementById('format').value = e.state.format;
+    loadTimeline();
+  }
+});
+</script>
+{{end}}

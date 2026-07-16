@@ -171,7 +171,7 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		// Check cache first (unless --no-cache)
 		if activityCache != nil && activityCache.HasDay(day, connectorNames) {
 			cachedActivities, err := activityCache.LoadDay(day)
-			if err == nil && len(cachedActivities) > 0 {
+			if err == nil {
 				allActivities = append(allActivities, cachedActivities...)
 				cachedDays++
 				if verbose {
@@ -203,8 +203,9 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 
 			dayActivities = append(dayActivities, result.Activities...)
 
-			// Store in cache (unless --no-cache)
-			if activityCache != nil && len(result.Activities) > 0 {
+			// Store in cache (unless --no-cache) — store even when 0 activities
+			// so HasDay knows this connector was fetched for this day.
+			if activityCache != nil {
 				if err := activityCache.StoreDay(day, result.Name, result.Activities); err != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "  Warning: could not cache %s/%s: %v\n", day.Format("2006-01-02"), result.Name, err)

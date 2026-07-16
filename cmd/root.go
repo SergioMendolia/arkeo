@@ -12,6 +12,7 @@ import (
 
 var (
 	configPath string
+	webAddr    string
 )
 
 var version = "dev" // Will be set by SetVersion function
@@ -29,27 +30,36 @@ var rootCmd = &cobra.Command{
 gather information about your daily activities and presents them in a chronological timeline.
 
 Features:
-• Connect to GitHub, Calendar, File System, and other services
-• View activities in a formatted timeline
+• Connect to GitHub, GitLab, Calendar, YouTrack, Browser History, and more
+• View activities in a formatted timeline or interactive web UI
+• Cache past activities for instant re-display
 • Configure connectors through YAML configuration
-• Export activity data in various formats
 
-Use the CLI commands to interact with the system and view your daily activities.`,
-	Example: `  # Show yesterday's timeline (default)
+When run without a subcommand, launches the web UI.`,
+	Example: `  # Launch the web UI (default)
+  arkeo
+
+  # Show yesterday's timeline in the terminal
   arkeo timeline
 
   # Show timeline for a specific date
-  arkeo timeline 2023-12-25
+  arkeo timeline 2024-01-15
 
-  # Show activities for the entire work week
-  arkeo timeline --week
+  # Fetch the last 6 months of history
+  arkeo timeline --range 180
 
-  # Output in different formats
+  # Output in JSON format
   arkeo timeline --format json
 
   # List all connectors and their status
   arkeo connectors list
+
+  # Manage browser domain exclusions interactively
+  arkeo browser domains
 `,
+	Run: func(cmd *cobra.Command, args []string) {
+		runWebCommand(cmd, args)
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -66,12 +76,14 @@ func init() {
 	// Disable the default completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	// No global flags
+	// Web UI flag (also available on the root command since web is the default)
+	rootCmd.PersistentFlags().StringVar(&webAddr, "addr", "localhost:7878", "Address for the web UI")
 
 	// Add subcommands
 	rootCmd.AddCommand(timelineCmd)
 	rootCmd.AddCommand(connectorsCmd)
 	rootCmd.AddCommand(browserCmd)
+	rootCmd.AddCommand(webCmd)
 }
 
 // initConfig reads in config file and ENV variables if set
