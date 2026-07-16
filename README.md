@@ -1,18 +1,19 @@
 # Arkeo - Daily Activity Timeline Builder
 
-Arkeo is a command-line tool that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline. Instead of manually logging your activities or monitoring your computer actively, Arkeo collects data from the connected services after they have happened so you don't need to worry about having an application running in the background.
+Arkeo is a command-line tool and web application that connects to various services to automatically gather information about your daily activities and presents them in a chronological timeline. Instead of manually logging your activities or monitoring your computer actively, Arkeo collects data from the connected services after they have happened so you don't need to worry about having an application running in the background.
 
 The tool is designed to answer the question "What the hell did I do on that day?" when you need to recall your daily activities for timesheeting.
 
 ## Features
 
+- **Web UI**: Interactive dark-themed web interface for browsing timelines, managing connectors, and configuring browser domain exclusions
 - **Multiple Connectors**: GitHub, GitLab, Google Calendar, YouTrack, macOS system events, browser history (Chrome/Chromium/Firefox), and custom webhooks
 - **Daily Timeline**: View all your activities in chronological order, one activity per line
 - **Output Formats**: Table (default, with colors) and JSON (metadata-free)
 - **Date Ranges**: Single day, work week (Mon-Fri), or arbitrary date ranges (e.g. last 6 months)
 - **Activity Caching**: Past days are cached in a local SQLite database for instant re-display
-- **Browser Domain Manager**: Interactive TUI to browse visited domains and manage exclusions
-- **Easy Configuration**: Manage connectors through YAML configuration
+- **Browser Domain Manager**: Interactive TUI or web UI to browse visited domains and manage exclusions
+- **Easy Configuration**: Manage connectors through YAML configuration or the web UI
 
 ## Installation
 
@@ -36,14 +37,20 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
 
 ## Quick Start
 
-1. **Configure your first connector**:
+1. **Launch the web UI** (default when running `arkeo` with no arguments):
    ```bash
-   # Edit ~/.config/arkeo/config.yaml directly
+   arkeo
+   # Opens http://localhost:7878 in your browser automatically
+   ```
+
+2. **Configure connectors** — either in the web UI under Connectors, or via CLI:
+   ```bash
+   # Edit ~/.config/arkeo/config.yaml to add API tokens
    # Then enable a connector
    arkeo connectors enable github
    ```
 
-2. **View your timeline**:
+3. **View your timeline** — in the web UI or via CLI:
    ```bash
    # Show yesterday's activities (default)
    arkeo timeline
@@ -64,7 +71,7 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
    arkeo timeline --max-items 100
    ```
 
-3. **Manage browser domain exclusions**:
+4. **Manage browser domain exclusions**:
    ```bash
    # Interactive TUI to browse domains and toggle exclusions
    arkeo browser domains
@@ -76,13 +83,29 @@ Download the latest release from [GitHub Releases](https://github.com/sergiomend
    arkeo browser domains --days 30
    ```
 
+## Web UI
+
+Running `arkeo` with no arguments launches a local web application at `http://localhost:7878`. The browser opens automatically.
+
+### Pages
+
+- **Timeline** (`/`) — Browse activities by date with prev/next day navigation. The URL is bookmarkable: `/?date=2024-01-15&format=table`. Supports table and JSON views. Cached days load instantly.
+- **Connectors** (`/connectors`) — Enable, disable, test, and configure connectors. Each connector has an inline settings panel for editing API tokens, URLs, and other config fields. Secret fields (tokens) are masked.
+- **Browser** (`/browser`) — Scan browser history, view domain visit counts, and toggle domain exclusions with switch toggles. Save exclusions to config.
+
+### Web UI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--addr` | Address to listen on (default: `localhost:7878`) |
+
 ## Available Connectors
 
 ### GitHub Connector
 Fetches your commits, issues, and pull request activities from GitHub.
 
 ### GitLab Connector
-Fetches user activities from GitLab (push events, merge requests, issues, comments).
+Fetches user activities from GitLab (push events, new branches, branch deletions, merge requests, issues, comments).
 
 ### Google Calendar
 Retrieves calendar events and meetings via iCal URLs.
@@ -96,7 +119,7 @@ Fetches screen lock/unlock events on macOS systems using system logs. Only works
 ### Browser History Connector
 Fetches browsing history from Chrome/Chromium and Firefox. Visits to the same domain within a configurable time window are grouped into a single activity. Subdomains are normalized (e.g. `docs.github.com` → `github.com`).
 
-Use `arkeo browser domains` to interactively manage which domains to exclude from the timeline.
+Use `arkeo browser domains` or the web UI's Browser page to interactively manage which domains to exclude from the timeline.
 
 ### Webhooks Connector
 Fetches activities from custom HTTP webhook endpoints. Each webhook is called with `GET {url}?date=YYYY-MM-DD` and should return a JSON array of activities.
@@ -108,7 +131,7 @@ Fetches activities from custom HTTP webhook endpoints. Each webhook is called wi
 
 ## Caching
 
-Arkeo caches fetched activities in a local SQLite database at `~/.config/arkeo/cache.db`. Once a day has been fetched from connectors, subsequent runs load instantly from cache.
+Arkeo caches fetched activities in a local SQLite database at `~/.config/arkeo/cache.db`. Once a day has been fetched from connectors, subsequent runs load instantly from cache — even if some connectors returned zero activities for that day.
 
 ```bash
 # Normal run (uses cache for past days)
@@ -123,7 +146,7 @@ arkeo timeline --no-cache
 
 ## Configuration
 
-Arkeo stores configuration in `~/.config/arkeo/config.yaml` (XDG_CONFIG_HOME is respected). Edit this file directly with your preferred editor.
+Arkeo stores configuration in `~/.config/arkeo/config.yaml` (XDG_CONFIG_HOME is respected). Edit this file directly with your preferred editor, or use the web UI's Connectors page to edit connector settings interactively.
 
 ### Example Configuration
 
@@ -132,13 +155,16 @@ See [config.example.yaml](config.example.yaml) for a complete configuration exam
 ## Commands
 
 ```
-arkeo timeline [date]           # Show activity timeline for a date
-arkeo connectors list            # List all available connectors
-arkeo connectors enable <name>  # Enable a connector
-arkeo connectors disable <name> # Disable a connector
-arkeo connectors info <name>    # Show connector info and config
-arkeo connectors test <name>    # Test a connector's connection
-arkeo browser domains            # Interactive domain manager (TUI)
+arkeo                             # Launch the web UI (default)
+arkeo web                         # Launch the web UI (explicit)
+arkeo web --addr :8080            # Launch web UI on a custom port
+arkeo timeline [date]             # Show activity timeline for a date
+arkeo connectors list              # List all available connectors
+arkeo connectors enable <name>   # Enable a connector
+arkeo connectors disable <name>  # Disable a connector
+arkeo connectors info <name>     # Show connector info and config
+arkeo connectors test <name>     # Test a connector's connection
+arkeo browser domains             # Interactive domain manager (TUI)
 ```
 
 ### Timeline Flags
@@ -197,10 +223,12 @@ Also add the default config to `internal/config/config.go` in `DefaultConfig()` 
 
 1. **"No connectors are enabled"**
    - Enable connectors: `arkeo connectors enable <name>`
+   - Or use the web UI at `/connectors`
 
 2. **"Connection test failed"**
    - Verify API tokens and credentials in `~/.config/arkeo/config.yaml`
    - Test connection: `arkeo connectors test <name>`
+   - Or use the web UI's Test button on the Connectors page
 
 3. **"No activities found"**
    - Check that the date has activity
