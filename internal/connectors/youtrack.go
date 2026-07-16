@@ -764,6 +764,12 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 			ytActivity.ID, issueID, issueKey, displayIssueID)
 	}
 
+	// Build the issue reference: "ZBR-7696: Some summary"
+	issueRef := displayIssueID
+	if issueSummary != "" {
+		issueRef = fmt.Sprintf("%s: %s", displayIssueID, issueSummary)
+	}
+
 	// Generate activity title and description based on category
 	var title, description string
 
@@ -781,16 +787,16 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 		newValue := y.extractFieldValue(ytActivity.Added)
 		oldValue := y.extractFieldValue(ytActivity.Removed)
 
-		// Build title with new value if available
+		// Build title with new value and issue reference (includes summary)
 		if newValue != "" {
 			title = fmt.Sprintf("Updated %s to %s", fieldName, newValue)
-			if displayIssueID != "" {
-				title = fmt.Sprintf("Updated %s to %s in %s", fieldName, newValue, displayIssueID)
+			if issueRef != "" {
+				title = fmt.Sprintf("Updated %s to %s in %s", fieldName, newValue, issueRef)
 			}
 		} else {
 			title = fmt.Sprintf("Updated %s", fieldName)
-			if displayIssueID != "" {
-				title = fmt.Sprintf("Updated %s in %s", fieldName, displayIssueID)
+			if issueRef != "" {
+				title = fmt.Sprintf("Updated %s in %s", fieldName, issueRef)
 			}
 		}
 
@@ -807,29 +813,29 @@ func (y *YouTrackConnector) convertActivity(ytActivity youTrackActivity) *timeli
 
 	case "CommentsCategory":
 		title = "Added comment"
-		if displayIssueID != "" {
-			title = fmt.Sprintf("Commented on %s", displayIssueID)
+		if issueRef != "" {
+			title = fmt.Sprintf("Commented on %s", issueRef)
 		}
 		description = "Added a comment"
 
 	case "WorkItemCategory":
 		title = "Logged work"
-		if displayIssueID != "" {
-			title = fmt.Sprintf("Logged work on %s", displayIssueID)
+		if issueRef != "" {
+			title = fmt.Sprintf("Logged work on %s", issueRef)
 		}
 		description = "Added work item"
 
 	case "LinkCategory":
 		title = "Updated links"
-		if displayIssueID != "" {
-			title = fmt.Sprintf("Updated links for %s", displayIssueID)
+		if issueRef != "" {
+			title = fmt.Sprintf("Updated links for %s", issueRef)
 		}
 		description = "Modified issue links"
 
 	default:
 		title = categoryName
-		if displayIssueID != "" {
-			title = fmt.Sprintf("%s - %s", categoryName, displayIssueID)
+		if issueRef != "" {
+			title = fmt.Sprintf("%s - %s", categoryName, issueRef)
 		}
 		description = fmt.Sprintf("YouTrack activity: %s", categoryName)
 	}

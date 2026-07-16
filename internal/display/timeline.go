@@ -14,7 +14,7 @@ import (
 // TimelineOptions controls how the timeline is displayed
 type TimelineOptions struct {
 	MaxItems int
-	Format   string      // "table", "json", "csv", "taxi"
+	Format   string      // "table" or "json"
 	Dates    []time.Time // Empty or single date = single day mode, multiple dates = week mode
 }
 
@@ -69,10 +69,6 @@ func displaySingleDay(activities []timeline.Activity, date time.Time, opts Timel
 	switch opts.Format {
 	case "json":
 		return formatters.DisplayJSON(tl, dayActivities)
-	case "csv":
-		return formatters.DisplayCSV(dayActivities)
-	case "taxi":
-		return formatters.DisplayTaxi(tl, dayActivities)
 	default:
 		return formatters.DisplayTable(tl, dayActivities, opts.Format)
 	}
@@ -87,19 +83,30 @@ func displayMultipleDays(activities []timeline.Activity, dates []time.Time, opts
 	switch opts.Format {
 	case "json":
 		return displayMultipleDaysJSON(activitiesByDay, dates, opts)
-	case "csv":
-		return displayMultipleDaysCSV(activitiesByDay, dates, opts)
-	case "taxi":
-		return displayMultipleDaysTaxi(activitiesByDay, dates, opts)
 	default:
 		return displayMultipleDaysTable(activitiesByDay, dates, opts)
 	}
 }
 
-// displayMultipleDaysJSON outputs JSON for multiple days
+// displayMultipleDaysJSON outputs JSON for multiple days (without metadata)
 func displayMultipleDaysJSON(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
-	// Build map with dates as keys
-	result := make(map[string]*timeline.Timeline)
+	// Build map with dates as keys, using the metadata-less projection
+	type jsonActivity struct {
+		ID          string                `json:"id"`
+		Type        timeline.ActivityType `json:"type"`
+		Title       string                `json:"title"`
+		Description string                `json:"description"`
+		Timestamp   time.Time             `json:"timestamp"`
+		Duration    *time.Duration        `json:"duration,omitempty"`
+		Source      string                `json:"source"`
+		URL         string                `json:"url,omitempty"`
+	}
+	type jsonTimeline struct {
+		Date       time.Time      `json:"date"`
+		Activities []jsonActivity `json:"activities"`
+	}
+
+	result := make(map[string]*jsonTimeline)
 
 	for _, date := range dates {
 		dayActivities := activitiesByDay[date]
@@ -115,14 +122,26 @@ func displayMultipleDaysJSON(activitiesByDay map[time.Time][]timeline.Activity, 
 		// Sort activities for this day
 		sortActivitiesByTime(dayActivities)
 
-		// Create timeline for this day
-		tl := timeline.NewTimeline(date.Truncate(24 * time.Hour))
-		tl.AddActivitiesUnsorted(dayActivities)
-		tl.EnsureSorted()
+		// Build metadata-less projection
+		activitiesOut := make([]jsonActivity, len(dayActivities))
+		for i, a := range dayActivities {
+			activitiesOut[i] = jsonActivity{
+				ID:          a.ID,
+				Type:        a.Type,
+				Title:       a.Title,
+				Description: a.Description,
+				Timestamp:   a.Timestamp,
+				Duration:    a.Duration,
+				Source:      a.Source,
+				URL:         a.URL,
+			}
+		}
 
-		// Use date as key (YYYY-MM-DD format)
 		dateKey := date.Format("2006-01-02")
-		result[dateKey] = tl
+		result[dateKey] = &jsonTimeline{
+			Date:       date.Truncate(24 * time.Hour),
+			Activities: activitiesOut,
+		}
 	}
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -134,90 +153,18 @@ func displayMultipleDaysJSON(activitiesByDay map[time.Time][]timeline.Activity, 
 	return nil
 }
 
-// displayMultipleDaysCSV outputs CSV for multiple days
-func displayMultipleDaysCSV(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
-	// CSV header
-	fmt.Println("date,timestamp,type,source,title,description,duration,url")
-
-	for _, date := range dates {
-		dayActivities := activitiesByDay[date]
-		if len(dayActivities) == 0 {
-			continue
-		}
-
-		// Apply max items limit per day
-		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
-			dayActivities = dayActivities[:opts.MaxItems]
-		}
-
-		// Sort activities for this day
-		sortActivitiesByTime(dayActivities)
-
-		// Output date line + CSV for each day
-		dateStr := date.Format("2006-01-02")
-		for _, activity := range dayActivities {
-			duration := ""
-			if activity.Duration != nil {
-				duration = activity.FormatDuration()
-			}
-
-			fmt.Printf("%s,%s,%s,%s,%s,%s,%s,%s\n",
-				dateStr,
-				activity.Timestamp.Format("2006-01-02 15:04:05"),
-				activity.Type,
-				activity.Source,
-				formatters.CSVEscape(activity.Title),
-				formatters.CSVEscape(activity.Description),
-				duration,
-				activity.URL,
-			)
-		}
-	}
-
-	return nil
-}
-
-// displayMultipleDaysTaxi outputs taxi format for multiple days
-func displayMultipleDaysTaxi(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
-	for i, date := range dates {
-		dayActivities := activitiesByDay[date]
-		if len(dayActivities) == 0 {
-			continue // Skip empty days
-		}
-
-		// Apply max items limit per day
-		if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
-			dayActivities = dayActivities[:opts.MaxItems]
-		}
-
-		// Sort activities for this day
-		sortActivitiesByTime(dayActivities)
-
-		// Create timeline for this day
-		tl := timeline.NewTimeline(date.Truncate(24 * time.Hour))
-		tl.AddActivitiesUnsorted(dayActivities)
-		tl.EnsureSorted()
-
-		// Output this day in taxi format (formatter already includes date header)
-		if err := formatters.DisplayTaxi(tl, dayActivities); err != nil {
-			return err
-		}
-
-		// Add blank line between days (except after last day)
-		if i < len(dates)-1 {
-			fmt.Println()
-		}
-	}
-
-	return nil
-}
-
 // displayMultipleDaysTable outputs table format for multiple days
 func displayMultipleDaysTable(activitiesByDay map[time.Time][]timeline.Activity, dates []time.Time, opts TimelineOptions) error {
-	// Display week header
+	// Display header
 	if len(dates) > 0 {
-		monday := dates[0]
-		title := fmt.Sprintf("Timeline for Week of %s", monday.Format("Monday, January 2, 2006"))
+		firstDate := dates[0]
+		lastDate := dates[len(dates)-1]
+		var title string
+		if len(dates) == 5 && dates[0].Weekday() == time.Monday {
+			title = fmt.Sprintf("Timeline for Week of %s", firstDate.Format("Monday, January 2, 2006"))
+		} else {
+			title = fmt.Sprintf("Timeline for %s – %s", firstDate.Format("January 2, 2006"), lastDate.Format("January 2, 2006"))
+		}
 		fmt.Printf("%s\n", colors.Colorize(title, colors.Bold+colors.Blue))
 
 		totalActivities := 0
@@ -269,25 +216,27 @@ func displayMultipleDaysTable(activitiesByDay map[time.Time][]timeline.Activity,
 
 // Helper functions
 
-// groupActivitiesByDay groups activities by their date (ignoring time)
+// groupActivitiesByDay groups activities by their date (ignoring time and timezone).
+// Comparison is done by date string (YYYY-MM-DD) to correctly handle activities
+// in different timezones than the requested dates.
 func groupActivitiesByDay(activities []timeline.Activity, dates []time.Time) map[time.Time][]timeline.Activity {
 	activitiesByDay := make(map[time.Time][]timeline.Activity)
 
-	// Initialize map with all dates (truncated to day) so that days with no
-	// activities still appear as empty slices.
-	dateStarts := make(map[time.Time]time.Time, len(dates))
+	// Build a lookup from date string (YYYY-MM-DD) to the truncated date key.
+	dateByKey := make(map[string]time.Time, len(dates))
 	for _, date := range dates {
 		dateStart := date.Truncate(24 * time.Hour)
+		key := dateStart.Format("2006-01-02")
 		activitiesByDay[dateStart] = make([]timeline.Activity, 0)
-		dateStarts[dateStart] = dateStart
+		dateByKey[key] = dateStart
 	}
 
 	// Group activities by day in a single pass (O(N)).
 	for _, activity := range activities {
-		activityDate := activity.Timestamp.Truncate(24 * time.Hour)
-		// Only keep activities that fall on one of the requested dates.
-		if _, ok := dateStarts[activityDate]; ok {
-			activitiesByDay[activityDate] = append(activitiesByDay[activityDate], activity)
+		// Use the activity's own date (in its timezone) formatted as YYYY-MM-DD.
+		activityDateKey := activity.Timestamp.Format("2006-01-02")
+		if dateStart, ok := dateByKey[activityDateKey]; ok {
+			activitiesByDay[dateStart] = append(activitiesByDay[dateStart], activity)
 		}
 	}
 

@@ -38,16 +38,17 @@ var TypeColors = map[timeline.ActivityType]string{
 
 // SourceLabels provides short labels for activity sources
 var SourceLabels = map[string]string{
-	"github":       "GH",
-	"gitlab":       "GL",
-	"calendar":     "CAL",
-	"youtrack":     "YT",
-	"slack":        "SLK",
-	"jira":         "JRA",
-	"macos_system": "MAC",
-	"system":       "SYS",
-	"file":         "FILE",
-	"browser":      "WEB",
+	"github":           "GH",
+	"gitlab":           "GL",
+	"calendar":         "CAL",
+	"youtrack":         "YT",
+	"slack":            "SLK",
+	"jira":             "JRA",
+	"macos_system":     "MAC",
+	"system":           "SYS",
+	"file":             "FILE",
+	"browser":          "WEB",
+	"browser_history":  "WEB",
 }
 
 // Colorize adds color codes to text

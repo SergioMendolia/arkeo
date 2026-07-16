@@ -358,7 +358,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               "In Progress",
 			removed:             "Open",
 			fieldName:           "State",
-			expectedTitle:       "Updated State to In Progress in TEST-123",
+			expectedTitle:       "Updated State to In Progress in TEST-123: Test Issue",
 			expectedDescription: "Changed State from Open to In Progress",
 		},
 		{
@@ -366,7 +366,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               map[string]interface{}{"name": "High", "id": "priority-1"},
 			removed:             map[string]interface{}{"name": "Normal", "id": "priority-2"},
 			fieldName:           "Priority",
-			expectedTitle:       "Updated Priority to High in TEST-123",
+			expectedTitle:       "Updated Priority to High in TEST-123: Test Issue",
 			expectedDescription: "Changed Priority from Normal to High",
 		},
 		{
@@ -374,7 +374,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               "john.doe",
 			removed:             nil,
 			fieldName:           "Assignee",
-			expectedTitle:       "Updated Assignee to john.doe in TEST-123",
+			expectedTitle:       "Updated Assignee to john.doe in TEST-123: Test Issue",
 			expectedDescription: "Set Assignee to john.doe",
 		},
 		{
@@ -382,7 +382,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               nil,
 			removed:             "jane.doe",
 			fieldName:           "Assignee",
-			expectedTitle:       "Updated Assignee in TEST-123",
+			expectedTitle:       "Updated Assignee in TEST-123: Test Issue",
 			expectedDescription: "Cleared Assignee (was jane.doe)",
 		},
 		{
@@ -390,7 +390,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               nil,
 			removed:             nil,
 			fieldName:           "Custom Field",
-			expectedTitle:       "Updated Custom Field in TEST-123",
+			expectedTitle:       "Updated Custom Field in TEST-123: Test Issue",
 			expectedDescription: "Modified Custom Field",
 		},
 		{
@@ -398,7 +398,7 @@ func TestYouTrackConnector_ConvertActivityWithFieldValues(t *testing.T) {
 			added:               []interface{}{"backend", "api"},
 			removed:             []interface{}{"frontend"},
 			fieldName:           "Tags",
-			expectedTitle:       "Updated Tags to backend, api in TEST-123",
+			expectedTitle:       "Updated Tags to backend, api in TEST-123: Test Issue",
 			expectedDescription: "Changed Tags from frontend to backend, api",
 		},
 	}
@@ -530,8 +530,8 @@ func TestYouTrackConnector_ConvertActivity_CommentCategory(t *testing.T) {
 		t.Fatal("Expected activity, got nil")
 	}
 
-	if activity.Title != "Commented on TEST-456" {
-		t.Errorf("Expected title 'Commented on TEST-456', got '%s'", activity.Title)
+	if activity.Title != "Commented on TEST-456: Another Test Issue" {
+		t.Errorf("Expected title 'Commented on TEST-456: Another Test Issue', got '%s'", activity.Title)
 	}
 
 	if activity.Description != "Added a comment" {
@@ -823,9 +823,9 @@ func TestYouTrackConnector_BackwardsCompatibility_MissingIdReadable(t *testing.T
 		t.Fatal("Expected activity, got nil")
 	}
 
-	// Should use internal ID when idReadable is not available
-	if activity.Title != "Updated Priority in internal-456" {
-		t.Errorf("Expected title 'Updated Priority in internal-456', got '%s'", activity.Title)
+	// Should use internal ID when idReadable is not available, with summary
+	if activity.Title != "Updated Priority in internal-456: Legacy Issue Format" {
+		t.Errorf("Expected title 'Updated Priority in internal-456: Legacy Issue Format', got '%s'", activity.Title)
 	}
 
 	if activity.URL != "https://example.youtrack.cloud/issue/internal-456" {
@@ -890,8 +890,8 @@ func TestYouTrackConnector_CommentActivityIssueKeyExtraction(t *testing.T) {
 	}
 
 	// Should use issue key from target.issue.idReadable
-	if activity.Title != "Commented on DEMO-321" {
-		t.Errorf("Expected title 'Commented on DEMO-321', got '%s'", activity.Title)
+	if activity.Title != "Commented on DEMO-321: Comment Test Issue" {
+		t.Errorf("Expected title 'Commented on DEMO-321: Comment Test Issue', got '%s'", activity.Title)
 	}
 
 	if activity.URL != "https://example.youtrack.cloud/issue/DEMO-321" {

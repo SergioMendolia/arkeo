@@ -20,7 +20,10 @@ var timelineCmd = &cobra.Command{
 	Long: `Display the activity timeline for a specific date.
 Activities are fetched from all enabled connectors and displayed in chronological order.
 
-If no date is provided, defaults to yesterday. Date format: YYYY-MM-DD`,
+If no date is provided, defaults to yesterday. Date format: YYYY-MM-DD
+
+Use --range N to fetch activities for the last N days ending at the selected date.
+For example, --range 180 fetches ~6 months of history.`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runTimelineCommand,
 }
@@ -28,11 +31,13 @@ If no date is provided, defaults to yesterday. Date format: YYYY-MM-DD`,
 var format string
 var maxItems int
 var week bool
+var rangeDays int
 
 func init() {
-	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, csv, taxi)")
+	timelineCmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
 	timelineCmd.Flags().IntVar(&maxItems, "max-items", 0, "Maximum number of activities to display (0 = unlimited)")
 	timelineCmd.Flags().BoolVar(&week, "week", false, "Display activities for the entire work week (Monday-Friday) containing the selected date")
+	timelineCmd.Flags().IntVar(&rangeDays, "range", 0, "Fetch activities for the last N days ending at the selected date (e.g. --range 180 for ~6 months)")
 }
 
 func runTimelineCommand(cmd *cobra.Command, args []string) {
@@ -74,20 +79,42 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 	}
 
 	var allActivities []timeline.Activity
-	var weekDays []time.Time
-	isMachineReadable := format == "json" || format == "csv" || format == "taxi"
+	var rangeDaysList []time.Time
+	isMachineReadable := format == "json"
 	verbose := !isMachineReadable
 
-	if week {
+	if rangeDays > 0 {
+		// Range mode: fetch activities for the last N days ending at the target date
+		rangeDaysList = make([]time.Time, rangeDays)
+		for i := 0; i < rangeDays; i++ {
+			rangeDaysList[i] = targetDate.AddDate(0, 0, -(rangeDays - 1 - i)).Truncate(24 * time.Hour)
+		}
+
+		if !isMachineReadable {
+			fmt.Printf("Fetching activities for %d days (%s to %s)...\n",
+				rangeDays,
+				rangeDaysList[0].Format("2006-01-02"),
+				rangeDaysList[len(rangeDaysList)-1].Format("2006-01-02"))
+		}
+
+		for _, day := range rangeDaysList {
+			dayActivities := utils.FetchActivitiesParallel(ctx, utilsConnectors, day, verbose)
+			allActivities = append(allActivities, dayActivities...)
+		}
+
+		if !isMachineReadable {
+			fmt.Printf("Fetched %d activities from %d connector(s) across %d days.\n", len(allActivities), len(enabledConnectors), len(rangeDaysList))
+		}
+	} else if week {
 		// Calculate Monday-Friday range for the week containing the selected date
 		weekday := targetDate.Weekday()
 		daysFromMonday := (int(weekday) - int(time.Monday) + 7) % 7
 		monday := targetDate.AddDate(0, 0, -daysFromMonday).Truncate(24 * time.Hour)
 
 		// Generate Monday-Friday dates
-		weekDays = make([]time.Time, 5)
+		rangeDaysList = make([]time.Time, 5)
 		for i := 0; i < 5; i++ {
-			weekDays[i] = monday.AddDate(0, 0, i)
+			rangeDaysList[i] = monday.AddDate(0, 0, i)
 		}
 
 		if !isMachineReadable {
@@ -95,13 +122,13 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		}
 
 		// Fetch activities for each day in the week
-		for _, day := range weekDays {
+		for _, day := range rangeDaysList {
 			dayActivities := utils.FetchActivitiesParallel(ctx, utilsConnectors, day, verbose)
 			allActivities = append(allActivities, dayActivities...)
 		}
 
 		if !isMachineReadable {
-			fmt.Printf("Fetched %d activities from %d connector(s) across %d days.\n", len(allActivities), len(enabledConnectors), len(weekDays))
+			fmt.Printf("Fetched %d activities from %d connector(s) across %d days.\n", len(allActivities), len(enabledConnectors), len(rangeDaysList))
 		}
 	} else {
 		// Single day mode
@@ -120,9 +147,9 @@ func runTimelineCommand(cmd *cobra.Command, args []string) {
 		Format:   format,   // Default is "table" set by flag
 	}
 
-	if week {
-		// Week view: set dates to week days
-		opts.Dates = weekDays
+	if rangeDays > 0 || week {
+		// Range or week view: set dates to the generated list
+		opts.Dates = rangeDaysList
 	} else {
 		// Single day: set dates to single date
 		opts.Dates = []time.Time{targetDate.Truncate(24 * time.Hour)}

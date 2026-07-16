@@ -46,8 +46,6 @@ Use the CLI commands to interact with the system and view your daily activities.
 
   # Output in different formats
   arkeo timeline --format json
-  arkeo timeline --format csv
-  arkeo timeline --format taxi
 
   # List all connectors and their status
   arkeo connectors list
@@ -73,6 +71,7 @@ func init() {
 	// Add subcommands
 	rootCmd.AddCommand(timelineCmd)
 	rootCmd.AddCommand(connectorsCmd)
+	rootCmd.AddCommand(browserCmd)
 }
 
 // initConfig reads in config file and ENV variables if set
@@ -100,6 +99,7 @@ func initializeSystem() (*config.Manager, *connectors.ConnectorRegistry) {
 		connectors.NewYouTrackConnector(),
 		connectors.NewMacOSSystemConnector(),
 		connectors.NewWebhooksConnector(),
+		connectors.NewBrowserHistoryConnector(),
 	}
 
 	for _, connector := range availableConnectors {

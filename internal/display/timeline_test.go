@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arkeo/arkeo/internal/display/formatters"
 	"github.com/arkeo/arkeo/internal/timeline"
 )
 
@@ -63,6 +62,7 @@ func TestDisplayTimeline_TableFormat(t *testing.T) {
 		"Activities (chronological order):",
 		"09:00",
 		"Morning standup (30m)",
+		"Daily team meeting",
 		"12:00",
 		"Fix authentication bug",
 		"14:30",
@@ -141,37 +141,6 @@ func TestDisplayTimeline_MaxItems(t *testing.T) {
 	}
 }
 
-func TestDisplayTimeline_CSVFormat(t *testing.T) {
-	tl := createTestTimeline()
-	opts := DefaultTimelineOptions()
-	opts.Format = "csv"
-	opts.Dates = []time.Time{tl.Date}
-
-	output := captureOutput(func() {
-		err := DisplayTimeline(tl.Activities, opts)
-		if err != nil {
-			t.Errorf("DisplayTimeline failed: %v", err)
-		}
-	})
-
-	// Check CSV header
-	if !strings.Contains(output, "date,timestamp,type,source,title,description,duration,url") {
-		t.Error("CSV output should contain header row")
-	}
-
-	// Check CSV data rows
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 4 { // 1 header + 3 data rows
-		t.Errorf("Expected 4 CSV lines, got %d", len(lines))
-	}
-
-	// Check first data row
-	expectedFirstRow := "2024-01-15,2024-01-15 09:00:00,calendar,calendar,Morning standup,Daily team meeting,30m,https://calendar.example.com/event/1"
-	if lines[1] != expectedFirstRow {
-		t.Errorf("Expected first CSV row %q, got %q", expectedFirstRow, lines[1])
-	}
-}
-
 func TestDisplayTimeline_JSONFormat(t *testing.T) {
 	tl := createTestTimeline()
 	opts := DefaultTimelineOptions()
@@ -200,54 +169,6 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 		if !strings.Contains(output, expected) {
 			t.Errorf("JSON output should contain %q, got: %s", expected, output)
 		}
-	}
-}
-
-func TestCSVEscape(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "no special characters",
-			input:    "simple text",
-			expected: "simple text",
-		},
-		{
-			name:     "contains comma",
-			input:    "hello, world",
-			expected: `"hello, world"`,
-		},
-		{
-			name:     "contains quote",
-			input:    `hello "world"`,
-			expected: `"hello ""world"""`,
-		},
-		{
-			name:     "contains newline",
-			input:    "hello\nworld",
-			expected: "\"hello\nworld\"",
-		},
-		{
-			name:     "contains comma and quote",
-			input:    `hello, "world"`,
-			expected: `"hello, ""world"""`,
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatters.CSVEscape(tt.input)
-			if result != tt.expected {
-				t.Errorf("CSVEscape(%q) = %q, expected %q", tt.input, result, tt.expected)
-			}
-		})
 	}
 }
 

@@ -129,6 +129,28 @@ func DefaultConfig() *Config {
 					},
 				},
 			},
+			"browser_history": {
+				Enabled: false,
+				Config: map[string]interface{}{
+					// Which browsers to scan (comma-separated: chrome, firefox)
+					"browsers": "chrome,firefox",
+
+					// Domains to exclude from the timeline (comma-separated)
+					"exclude_domains": "google.com,localhost,127.0.0.1",
+
+					// Group visits to the same domain within N minutes into one activity
+					"group_window_minutes": 5,
+
+					// Minimum visit count to show a domain (0 = show all)
+					"min_visits": 1,
+
+					// Chrome profile directory name (default: Default)
+					"chrome_profile": "Default",
+
+					// Firefox profile directory name (auto-detected if empty)
+					"firefox_profile": "",
+				},
+			},
 		},
 	}
 }
@@ -543,6 +565,25 @@ func (m *Manager) GenerateExampleConfigYAML() string {
 	b.WriteString("        # - name: \"Another Service\"\n")
 	b.WriteString("        #   url: \"https://api.another.com/events\"\n")
 	b.WriteString("        #   token: \"another-token\"\n\n")
+
+	// Browser History connector
+	b.WriteString("  # Browser History connector - fetches browsing history from Chrome/Chromium and Firefox\n")
+	b.WriteString("  browser_history:\n")
+	b.WriteString("    enabled: false\n")
+	b.WriteString("    config:\n")
+	b.WriteString("      # Which browsers to scan (comma-separated: chrome, firefox)\n")
+	b.WriteString("      browsers: \"chrome,firefox\"\n\n")
+	b.WriteString("      # Domains to exclude from the timeline (comma-separated)\n")
+	b.WriteString("      # Use 'arkeo browser domains' to interactively manage this list\n")
+	b.WriteString("      exclude_domains: \"google.com,localhost,127.0.0.1\"\n\n")
+	b.WriteString("      # Group visits to the same domain within N minutes into one activity\n")
+	b.WriteString("      group_window_minutes: 5\n\n")
+	b.WriteString("      # Minimum visit count to show a domain (0 = show all)\n")
+	b.WriteString("      min_visits: 1\n\n")
+	b.WriteString("      # Chrome profile directory name (default: Default)\n")
+	b.WriteString("      chrome_profile: \"Default\"\n\n")
+	b.WriteString("      # Firefox profile directory name (auto-detected if empty)\n")
+	b.WriteString("      firefox_profile: \"\"\n\n")
 
 	return b.String()
 }
