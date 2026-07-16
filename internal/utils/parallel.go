@@ -65,12 +65,15 @@ func (pe *ParallelExecutor) FetchActivitiesParallelWithProgress(ctx context.Cont
 
 	// Launch goroutines for each connector
 	for name, connector := range connectorMap {
+		// Acquire semaphore before launching the goroutine so that the
+		// number of concurrently running connectors is bounded by
+		// maxConcurrency. Acquiring here (rather than inside the goroutine)
+		// prevents spawning all goroutines at once.
+		semaphore <- struct{}{}
+
 		wg.Add(1)
 		go func(connectorName string, conn Connector) {
 			defer wg.Done()
-
-			// Acquire semaphore
-			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
 			// Notify start
@@ -193,6 +196,10 @@ type ExecutionStats struct {
 
 // String returns a formatted string representation of the execution stats
 func (s ExecutionStats) String() string {
+	if s.TotalConnectors == 0 {
+		return "Execution Stats: no connectors executed"
+	}
+
 	successRate := float64(s.SuccessfulFetches) / float64(s.TotalConnectors) * 100
 
 	return fmt.Sprintf(
@@ -224,12 +231,14 @@ func (s ExecutionStats) GetSlowestConnector() (string, time.Duration) {
 // GetFastestConnector returns the name and duration of the fastest connector
 func (s ExecutionStats) GetFastestConnector() (string, time.Duration) {
 	var fastestName string
-	var fastestDuration time.Duration = time.Hour // Initialize with large value
+	var fastestDuration time.Duration
+	var found bool
 
 	for name, duration := range s.ConnectorTimings {
-		if duration < fastestDuration {
+		if !found || duration < fastestDuration {
 			fastestName = name
 			fastestDuration = duration
+			found = true
 		}
 	}
 

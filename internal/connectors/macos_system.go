@@ -77,6 +77,10 @@ func (c *MacOSSystemConnector) TestConnection(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "log", "show", "--predicate", "(process == \"loginwindow\")", "--last", "1m", "--info")
 
 	if err := cmd.Run(); err != nil {
+		// Respect context cancellation/timeout before wrapping the error.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf(errLogCommandFailed, err)
 	}
 
@@ -87,11 +91,15 @@ func (c *MacOSSystemConnector) TestConnection(ctx context.Context) error {
 func (c *MacOSSystemConnector) buildLogCommand(ctx context.Context, date time.Time) *exec.Cmd {
 	// More efficient date formatting - avoid multiple sprintf calls
 	dateStr := date.Format("2006-01-02")
+	// Use the start of the next day as the end boundary so that events
+	// occurring in the final second of the target day (23:59:59.999999)
+	// are included. Using "23:59:59" misses sub-second events.
+	endDateStr := date.AddDate(0, 0, 1).Format("2006-01-02")
 
 	return exec.CommandContext(ctx,
 		"log", "show",
 		"--start", dateStr+" 00:00:00",
-		"--end", dateStr+" 23:59:59",
+		"--end", endDateStr+" 00:00:00",
 		"--predicate", "(process == \"loginwindow\" AND eventMessage CONTAINS \"setScreenIsLocked\")",
 		"--info",
 	)
@@ -110,6 +118,10 @@ func (c *MacOSSystemConnector) GetActivities(ctx context.Context, date time.Time
 	// Execute the command
 	output, err := cmd.Output()
 	if err != nil {
+		// Respect context cancellation/timeout before wrapping the error.
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf(errLogCommandFailed, err)
 	}
 

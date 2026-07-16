@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -130,9 +131,9 @@ func (w *WebhooksConnector) GetActivities(ctx context.Context, date time.Time) (
 	for _, webhook := range webhooks {
 		activities, err := w.fetchActivitiesFromWebhook(ctx, webhook, dateStr)
 		if err != nil {
-			if w.IsDebugMode() {
-				fmt.Printf("Warning: webhook '%s' failed: %v\n", webhook.Name, err)
-			}
+		if w.IsDebugMode() {
+			log.Printf("Warning: webhook '%s' failed: %v\n", webhook.Name, err)
+		}
 			continue // Continue with other webhooks even if one fails
 		}
 
@@ -269,7 +270,7 @@ func (w *WebhooksConnector) fetchActivitiesFromWebhook(ctx context.Context, webh
 	reqURL := fmt.Sprintf("%s?date=%s", webhook.URL, dateStr)
 
 	if w.IsDebugMode() {
-		fmt.Printf("Fetching activities from webhook: %s (%s)\n", webhook.Name, reqURL)
+		log.Printf("Fetching activities from webhook: %s (%s)\n", webhook.Name, reqURL)
 	}
 
 	req, err := w.CreateBearerRequest(ctx, "GET", reqURL, webhook.Token)
@@ -307,16 +308,16 @@ func (w *WebhooksConnector) fetchActivitiesFromWebhook(ctx context.Context, webh
 	for _, wa := range webhookActivities {
 		activity, err := w.convertWebhookActivity(wa, webhook.Name)
 		if err != nil {
-			if w.IsDebugMode() {
-				fmt.Printf("Warning: skipping invalid activity: %v\n", err)
-			}
+		if w.IsDebugMode() {
+			log.Printf("Warning: skipping invalid activity: %v\n", err)
+		}
 			continue
 		}
 		activities = append(activities, activity)
 	}
 
 	if w.IsDebugMode() {
-		fmt.Printf("Retrieved %d activities from webhook: %s\n", len(activities), webhook.Name)
+		log.Printf("Retrieved %d activities from webhook: %s\n", len(activities), webhook.Name)
 	}
 
 	return activities, nil

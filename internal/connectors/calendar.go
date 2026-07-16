@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -11,6 +12,12 @@ import (
 	"time"
 
 	"github.com/arkeo/arkeo/internal/timeline"
+)
+
+// Pre-compiled regexps used by the calendar connector.
+var (
+	// maskURLRegex masks the secret part of a Google Calendar iCal URL for logging.
+	maskURLRegex = regexp.MustCompile(`(https://calendar\.google\.com/calendar/ical/[^/]+/)([^/]+)(/basic\.ics)`)
 )
 
 // CalendarConnector implements the Connector interface for Google Calendar using iCal feeds
@@ -211,8 +218,7 @@ func (c *CalendarConnector) isValidGoogleCalendarURL(url string) bool {
 // maskURL masks the secret part of the URL for logging
 func (c *CalendarConnector) maskURL(url string) string {
 	// Replace the secret part with asterisks
-	re := regexp.MustCompile(`(https://calendar\.google\.com/calendar/ical/[^/]+/)([^/]+)(/basic\.ics)`)
-	return re.ReplaceAllString(url, "${1}***${3}")
+	return maskURLRegex.ReplaceAllString(url, "${1}***${3}")
 }
 
 // testICalURL tests connectivity to a single iCal URL
@@ -379,7 +385,7 @@ type ICalEvent struct {
 }
 
 // parseICalData parses iCal format data and extracts events
-func (c *CalendarConnector) parseICalData(body interface{}) ([]ICalEvent, error) {
+func (c *CalendarConnector) parseICalData(r io.Reader) ([]ICalEvent, error) {
 	var events []ICalEvent
 	var currentEvent *ICalEvent
 	lineCount := 0
@@ -389,7 +395,10 @@ func (c *CalendarConnector) parseICalData(body interface{}) ([]ICalEvent, error)
 		log.Printf("Calendar Debug: Starting to parse iCal data")
 	}
 
-	scanner := bufio.NewScanner(body.(interface{ Read([]byte) (int, error) }))
+	// Use a larger buffer than the default 64KB to handle long iCal lines
+	// (e.g. base64-encoded DESCRIPTION or ATTACH values).
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	for scanner.Scan() {
 		lineCount++
@@ -509,11 +518,6 @@ func (c *CalendarConnector) parseICalLine(line string, event *ICalEvent) {
 	case "URL":
 		event.URL = value
 	}
-}
-
-// parseICalDateTime parses iCal date/time formats (legacy - kept for backward compatibility)
-func (c *CalendarConnector) parseICalDateTime(value string) (time.Time, error) {
-	return c.parseICalDateTimeWithTZ(value, "")
 }
 
 // parseICalDateTimeWithTZ parses iCal date/time formats with timezone support

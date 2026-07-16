@@ -10,7 +10,7 @@ import (
 // DisplayCSV outputs timeline as CSV for a single day
 func DisplayCSV(activities []timeline.Activity) error {
 	// CSV header
-	fmt.Println("timestamp,type,source,title,description,duration,url")
+	fmt.Println("date,timestamp,type,source,title,description,duration,url")
 
 	for _, activity := range activities {
 		duration := ""
@@ -18,7 +18,8 @@ func DisplayCSV(activities []timeline.Activity) error {
 			duration = activity.FormatDuration()
 		}
 
-		fmt.Printf("%s,%s,%s,%s,%s,%s,%s\n",
+		fmt.Printf("%s,%s,%s,%s,%s,%s,%s,%s\n",
+			activity.Timestamp.Format("2006-01-02"),
 			activity.Timestamp.Format("2006-01-02 15:04:05"),
 			activity.Type,
 			activity.Source,

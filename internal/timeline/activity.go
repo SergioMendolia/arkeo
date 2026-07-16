@@ -113,12 +113,14 @@ func (t *Timeline) FilterBySource(source string) []Activity {
 	return filtered
 }
 
-// FilterByTimeRange returns activities within a specific time range
+// FilterByTimeRange returns activities within a specific time range [start, end)
 func (t *Timeline) FilterByTimeRange(start, end time.Time) []Activity {
 	// Pre-allocate with estimated capacity to reduce reallocations
 	filtered := make([]Activity, 0, len(t.Activities)/4)
 	for _, activity := range t.Activities {
-		if activity.Timestamp.After(start) && activity.Timestamp.Before(end) {
+		// Half-open interval [start, end): includes activities at exactly
+		// `start` and excludes activities at exactly `end`.
+		if !activity.Timestamp.Before(start) && activity.Timestamp.Before(end) {
 			filtered = append(filtered, activity)
 		}
 	}

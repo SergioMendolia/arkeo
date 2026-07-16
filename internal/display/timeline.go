@@ -51,6 +51,10 @@ func displaySingleDay(activities []timeline.Activity, date time.Time, opts Timel
 	dateEnd := dateStart.Add(24 * time.Hour)
 	dayActivities := filterActivitiesByDate(activities, dateStart, dateEnd)
 
+	// Sort before truncating so that MaxItems keeps the earliest activities
+	// consistently (matches the behaviour of the multi-day paths).
+	sortActivitiesByTime(dayActivities)
+
 	// Apply max items limit
 	if opts.MaxItems > 0 && len(dayActivities) > opts.MaxItems {
 		dayActivities = dayActivities[:opts.MaxItems]
@@ -269,22 +273,21 @@ func displayMultipleDaysTable(activitiesByDay map[time.Time][]timeline.Activity,
 func groupActivitiesByDay(activities []timeline.Activity, dates []time.Time) map[time.Time][]timeline.Activity {
 	activitiesByDay := make(map[time.Time][]timeline.Activity)
 
-	// Initialize map with all dates
+	// Initialize map with all dates (truncated to day) so that days with no
+	// activities still appear as empty slices.
+	dateStarts := make(map[time.Time]time.Time, len(dates))
 	for _, date := range dates {
 		dateStart := date.Truncate(24 * time.Hour)
 		activitiesByDay[dateStart] = make([]timeline.Activity, 0)
+		dateStarts[dateStart] = dateStart
 	}
 
-	// Group activities by day
+	// Group activities by day in a single pass (O(N)).
 	for _, activity := range activities {
 		activityDate := activity.Timestamp.Truncate(24 * time.Hour)
-		// Find which date this activity belongs to
-		for _, date := range dates {
-			dateStart := date.Truncate(24 * time.Hour)
-			if activityDate.Equal(dateStart) {
-				activitiesByDay[dateStart] = append(activitiesByDay[dateStart], activity)
-				break
-			}
+		// Only keep activities that fall on one of the requested dates.
+		if _, ok := dateStarts[activityDate]; ok {
+			activitiesByDay[activityDate] = append(activitiesByDay[activityDate], activity)
 		}
 	}
 
@@ -308,19 +311,4 @@ func filterActivitiesByDate(activities []timeline.Activity, start, end time.Time
 		}
 	}
 	return filtered
-}
-
-// DisplayConnectorStatus shows the status of all connectors
-func DisplayConnectorStatus(connectors map[string]bool) {
-	fmt.Println("Connector Status")
-	fmt.Println("══════════════════════════════════")
-
-	for name, enabled := range connectors {
-		status := "❌ Disabled"
-		if enabled {
-			status = "✅ Enabled"
-		}
-		fmt.Printf("%-15s %s\n", name, status)
-	}
-	fmt.Println()
 }

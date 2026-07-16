@@ -84,47 +84,18 @@ var connectorsDisableCmd = &cobra.Command{
 		configManager, registry := initializeSystem()
 		connectorName := args[0]
 
-		connector, exists := registry.Get(connectorName)
-		if !exists {
+		if _, exists := registry.Get(connectorName); !exists {
 			fmt.Fprintf(os.Stderr, "Connector '%s' not found\n", connectorName)
 			os.Exit(1)
 		}
 
-		// Get required config fields to check if all required fields are configured
-		requiredFields := connector.GetRequiredConfig()
-
-		// Check if all required fields are configured
-		missingFields := []string{}
-		for _, field := range requiredFields {
-			if field.Required {
-				val, exists := configManager.GetConnectorConfigValue(connectorName, field.Key)
-				isEmptyString := false
-				if str, ok := val.(string); ok && str == "" {
-					isEmptyString = true
-				}
-
-				if !exists || val == nil || isEmptyString {
-					missingFields = append(missingFields, field.Key)
-				}
-			}
-		}
-
-		if len(missingFields) > 0 {
-			fmt.Fprintf(os.Stderr, "Cannot enable connector '%s' - missing required configuration:\n", connectorName)
-			for _, field := range missingFields {
-				fmt.Fprintf(os.Stderr, "  • %s\n", field)
-			}
-			fmt.Fprintf(os.Stderr, "\nUse 'arkeo connectors config %s' to configure these fields\n", connectorName)
-			os.Exit(1)
-		}
-
-		configManager.EnableConnector(connectorName)
+		configManager.DisableConnector(connectorName)
 		if err := configManager.Save(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving configuration: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("Connector '%s' enabled\n", connectorName)
+		fmt.Printf("✅ Disabled connector: %s\n", connectorName)
 	},
 }
 
@@ -215,13 +186,13 @@ var connectorsInfoCmd = &cobra.Command{
 			fmt.Println("* Required field")
 		}
 
-		fmt.Println()
-		fmt.Printf("📝 Configure: arkeo connectors config %s\n", connectorName)
-		if configManager.IsConnectorEnabled(connectorName) {
-			fmt.Printf("🔌 Disable: arkeo connectors disable %s\n", connectorName)
-		} else {
-			fmt.Printf("🔌 Enable: arkeo connectors enable %s\n", connectorName)
-		}
+	fmt.Println()
+	fmt.Println("📝 Configure: edit ~/.config/arkeo/config.yaml")
+	if configManager.IsConnectorEnabled(connectorName) {
+		fmt.Printf("🔌 Disable: arkeo connectors disable %s\n", connectorName)
+	} else {
+		fmt.Printf("🔌 Enable: arkeo connectors enable %s\n", connectorName)
+	}
 	},
 }
 

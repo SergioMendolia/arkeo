@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/arkeo/arkeo/internal/timeline"
 )
@@ -324,25 +325,6 @@ func (b *BaseConnector) GetConfig() map[string]interface{} {
 	return b.config
 }
 
-// GetConfigWithDefaults returns the current configuration with any missing defaults filled in
-func (b *BaseConnector) GetConfigWithDefaults() map[string]interface{} {
-	// Start with current config
-	result := make(map[string]interface{})
-	for k, v := range b.config {
-		result[k] = v
-	}
-
-	// Add common defaults for any missing keys
-	commonFields := CommonConfigFields()
-	for key, field := range commonFields {
-		if _, exists := result[key]; !exists && field.Default != nil {
-			result[key] = field.Default
-		}
-	}
-
-	return result
-}
-
 // GetConfigString returns a string configuration value
 func (b *BaseConnector) GetConfigString(key string) string {
 	if val, ok := b.config[key]; ok {
@@ -454,4 +436,16 @@ func ValidateConfigFields(config map[string]interface{}, requiredFields []Config
 	}
 
 	return nil
+}
+
+// capitalizeFirst returns s with its first rune upper-cased. It is a small
+// locale-agnostic replacement for the deprecated strings.Title and avoids
+// pulling in golang.org/x/text.
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }

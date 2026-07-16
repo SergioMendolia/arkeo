@@ -155,7 +155,7 @@ func TestDisplayTimeline_CSVFormat(t *testing.T) {
 	})
 
 	// Check CSV header
-	if !strings.Contains(output, "timestamp,type,source,title,description,duration,url") {
+	if !strings.Contains(output, "date,timestamp,type,source,title,description,duration,url") {
 		t.Error("CSV output should contain header row")
 	}
 
@@ -166,7 +166,7 @@ func TestDisplayTimeline_CSVFormat(t *testing.T) {
 	}
 
 	// Check first data row
-	expectedFirstRow := "2024-01-15 09:00:00,calendar,calendar,Morning standup,Daily team meeting,30m,https://calendar.example.com/event/1"
+	expectedFirstRow := "2024-01-15,2024-01-15 09:00:00,calendar,calendar,Morning standup,Daily team meeting,30m,https://calendar.example.com/event/1"
 	if lines[1] != expectedFirstRow {
 		t.Errorf("Expected first CSV row %q, got %q", expectedFirstRow, lines[1])
 	}
@@ -199,33 +199,6 @@ func TestDisplayTimeline_JSONFormat(t *testing.T) {
 	for _, expected := range expectedStrings {
 		if !strings.Contains(output, expected) {
 			t.Errorf("JSON output should contain %q, got: %s", expected, output)
-		}
-	}
-}
-
-func TestDisplayConnectorStatus(t *testing.T) {
-	connectors := map[string]bool{
-		"github":   true,
-		"calendar": false,
-		"jira":     true,
-		"slack":    false,
-	}
-
-	output := captureOutput(func() {
-		DisplayConnectorStatus(connectors)
-	})
-
-	expectedStrings := []string{
-		"Connector Status",
-		"github          ✅ Enabled",
-		"calendar        ❌ Disabled",
-		"jira            ✅ Enabled",
-		"slack           ❌ Disabled",
-	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Connector status should contain %q, got:\n%s", expected, output)
 		}
 	}
 }

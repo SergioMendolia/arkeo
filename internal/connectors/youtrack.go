@@ -58,21 +58,21 @@ func (y *YouTrackConnector) GetRequiredConfig() []ConfigField {
 			Type:        "bool",
 			Required:    false,
 			Description: "Include work items (time tracking entries)",
-			Default:     "true",
+			Default:     true,
 		},
 		{
 			Key:         "include_comments",
 			Type:        "bool",
 			Required:    false,
 			Description: "Include comment activities",
-			Default:     "true",
+			Default:     true,
 		},
 		{
 			Key:         "include_issues",
 			Type:        "bool",
 			Required:    false,
 			Description: "Include issue field changes",
-			Default:     "true",
+			Default:     true,
 		},
 		{
 			Key:         "api_fields",
@@ -114,11 +114,6 @@ func (y *YouTrackConnector) ValidateConfig(config map[string]interface{}) error 
 		return fmt.Errorf("youtrack base_url must start with http:// or https://")
 	}
 
-	// Ensure base URL ends with /
-	if !strings.HasSuffix(baseURL, "/") {
-		config["base_url"] = baseURL + "/"
-	}
-
 	token, ok := config["token"].(string)
 	if !ok || token == "" {
 		return fmt.Errorf("youtrack token is required")
@@ -144,6 +139,23 @@ func (y *YouTrackConnector) ValidateConfig(config map[string]interface{}) error 
 		}
 	}
 
+	return nil
+}
+
+// Configure validates the configuration then delegates to
+// BaseConnector.Configure so common defaults are merged in. After the base
+// configuration is applied it normalizes base_url to end with a single "/".
+func (y *YouTrackConnector) Configure(config map[string]interface{}) error {
+	if err := y.ValidateConfig(config); err != nil {
+		return err
+	}
+	if err := y.BaseConnector.Configure(config); err != nil {
+		return err
+	}
+	// Normalize base_url: ensure it ends with exactly one trailing slash.
+	if baseURL, ok := y.config["base_url"].(string); ok && baseURL != "" {
+		y.config["base_url"] = strings.TrimSuffix(baseURL, "/") + "/"
+	}
 	return nil
 }
 
@@ -380,8 +392,11 @@ func (y *YouTrackConnector) getActivities(ctx context.Context, date time.Time, u
 		return nil, fmt.Errorf("username cannot be empty")
 	}
 
-	// Calculate start and end timestamps for the day
-	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	// Calculate start and end timestamps for the day.
+	// Normalize to the user's local day so that day boundaries match the
+	// user's working day rather than UTC (time.Parse returns UTC).
+	localDate := date.In(time.Local)
+	startOfDay := time.Date(localDate.Year(), localDate.Month(), localDate.Day(), 0, 0, 0, 0, localDate.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
 	startTimestamp := startOfDay.Unix() * 1000 // YouTrack uses milliseconds

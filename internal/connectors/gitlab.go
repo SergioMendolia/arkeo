@@ -15,6 +15,12 @@ import (
 	"github.com/arkeo/arkeo/internal/timeline"
 )
 
+// Pre-compiled regexps used by the GitLab connector.
+var (
+	htmlTagRegex    = regexp.MustCompile(`<[^>]*>`)
+	whitespaceRegex = regexp.MustCompile(`\s+`)
+)
+
 // GitLabConnector implements the Connector interface for GitLab
 type GitLabConnector struct {
 	*BaseConnector
@@ -89,15 +95,12 @@ func NewGitLabConnector() *GitLabConnector {
 
 // stripHTMLTags removes HTML tags from a string
 func (g *GitLabConnector) stripHTMLTags(input string) string {
-	// Regular expression to match HTML tags
-	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
 	// Replace HTML tags with a space to prevent words from being concatenated
 	cleaned := htmlTagRegex.ReplaceAllString(input, " ")
 	// Clean up extra whitespace
 	cleaned = strings.TrimSpace(cleaned)
 	// Replace multiple spaces with single space
-	spaceRegex := regexp.MustCompile(`\s+`)
-	cleaned = spaceRegex.ReplaceAllString(cleaned, " ")
+	cleaned = whitespaceRegex.ReplaceAllString(cleaned, " ")
 	return cleaned
 }
 
@@ -136,8 +139,9 @@ func (g *GitLabConnector) Configure(config map[string]interface{}) error {
 	if err := g.ValidateConfig(config); err != nil {
 		return err
 	}
-	g.BaseConnector.config = config
-	return nil
+	// Delegate to BaseConnector.Configure so common defaults (timeout,
+	// log_level, max_items, ...) are merged in rather than overwritten.
+	return g.BaseConnector.Configure(config)
 }
 
 // ValidateConfig validates the GitLab configuration
@@ -281,7 +285,9 @@ func (g *GitLabConnector) getEvents(ctx context.Context, gitlabURL, accessToken 
 	page := 1
 	perPage := 100
 	maxPages := 10 // Prevent infinite loops
-	targetDate := date.Truncate(24 * time.Hour)
+	// Normalize to the user's local day so that day boundaries match the
+	// user's working day rather than UTC.
+	targetDate := date.In(time.Local).Truncate(24 * time.Hour)
 	nextDay := targetDate.Add(24 * time.Hour)
 
 	if g.isDebugMode() {
@@ -494,14 +500,14 @@ func (g *GitLabConnector) convertPushEventToActivity(event GitLabEvent, eventTim
 func (g *GitLabConnector) convertMergeRequestEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
 	title := event.ActionName + " merge request"
 	if event.TargetTitle != nil {
-		title = fmt.Sprintf("%s merge request: %s", strings.Title(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
+		title = fmt.Sprintf("%s merge request: %s", capitalizeFirst(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
 	}
 
 	var description string
 	if event.Project != nil {
-		description = fmt.Sprintf("%s merge request in %s", strings.Title(event.ActionName), event.Project.PathWithNamespace)
+		description = fmt.Sprintf("%s merge request in %s", capitalizeFirst(event.ActionName), event.Project.PathWithNamespace)
 	} else {
-		description = fmt.Sprintf("%s merge request", strings.Title(event.ActionName))
+		description = fmt.Sprintf("%s merge request", capitalizeFirst(event.ActionName))
 	}
 
 	if event.TargetIID != nil {
@@ -549,14 +555,14 @@ func (g *GitLabConnector) convertIssueEventToActivity(event GitLabEvent, eventTi
 
 	title := action + " issue"
 	if event.TargetTitle != nil {
-		title = fmt.Sprintf("%s issue: %s", strings.Title(action), g.stripHTMLTags(*event.TargetTitle))
+		title = fmt.Sprintf("%s issue: %s", capitalizeFirst(action), g.stripHTMLTags(*event.TargetTitle))
 	}
 
 	var description string
 	if event.Project != nil {
-		description = fmt.Sprintf("%s issue in %s", strings.Title(action), event.Project.PathWithNamespace)
+		description = fmt.Sprintf("%s issue in %s", capitalizeFirst(action), event.Project.PathWithNamespace)
 	} else {
-		description = fmt.Sprintf("%s issue", strings.Title(action))
+		description = fmt.Sprintf("%s issue", capitalizeFirst(action))
 	}
 
 	if event.TargetIID != nil {
@@ -715,16 +721,16 @@ func (g *GitLabConnector) convertProjectEventToActivity(event GitLabEvent, event
 func (g *GitLabConnector) convertGenericEventToActivity(event GitLabEvent, eventTime time.Time) *timeline.Activity {
 	title := event.ActionName
 	if event.TargetTitle != nil {
-		title = fmt.Sprintf("%s: %s", strings.Title(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
+		title = fmt.Sprintf("%s: %s", capitalizeFirst(event.ActionName), g.stripHTMLTags(*event.TargetTitle))
 	} else {
-		title = strings.Title(event.ActionName)
+		title = capitalizeFirst(event.ActionName)
 	}
 
 	var description string
 	if event.Project != nil {
-		description = fmt.Sprintf("%s in %s", strings.Title(event.ActionName), event.Project.PathWithNamespace)
+		description = fmt.Sprintf("%s in %s", capitalizeFirst(event.ActionName), event.Project.PathWithNamespace)
 	} else {
-		description = strings.Title(event.ActionName)
+		description = capitalizeFirst(event.ActionName)
 	}
 
 	if event.TargetType != nil {
